@@ -37,13 +37,13 @@ rocketmq-reproduce/
 
 ### ✅ 已实现功能
 
-* [x] 模拟 NameServer 注册中心与路由表
-* [x] Broker 启动流程、Topic 初始化
-* [x] Producer 发送消息到 Broker 的基本链路
-* [x] 基于 Netty 的 RemotingCommand 封装与解析
-* [x] CommitLog 文件存储模拟（带 MappedByteBuffer）
-* [x] 消费者拉取消息逻辑、消费队列管理
-* [x] 简单 HA 高可用机制介绍与实验
+* [] 模拟 NameServer 注册中心与路由表
+* [] Broker 启动流程、Topic 初始化
+* [] Producer 发送消息到 Broker 的基本链路
+* [] 基于 Netty 的 RemotingCommand 封装与解析
+* [] CommitLog 文件存储模拟（带 MappedByteBuffer）
+* [] 消费者拉取消息逻辑、消费队列管理
+* [] 简单 HA 高可用机制介绍与实验
 
 ---
 
@@ -51,7 +51,7 @@ rocketmq-reproduce/
 
 | 模块     | 技术                     |
 | ------ | ---------------------- |
-| 编程语言   | Java 17+               |
+| 编程语言   | Java 8+               |
 | 构建工具   | Maven                  |
 | 网络通信   | Netty 4.x              |
 | 日志记录   | SLF4J + Logback        |
@@ -63,39 +63,11 @@ rocketmq-reproduce/
 
 ### 🧪 如何运行
 
-> 需提前安装好 JDK 17 和 Maven
-
-```bash
-# 克隆项目
-git clone https://github.com/<your-username>/rocketmq-reproduce.git
-cd rocketmq-reproduce
-
-# 编译
-mvn clean install
-
-# 启动 NameServer
-java -cp target/classes namesrv.NamesrvStartup
-
-# 启动 Broker
-java -cp target/classes broker.BrokerStartup
-
-# 启动 Producer 发送测试消息
-java -cp target/classes client.SimpleProducer
-
-# 启动 Consumer 拉取消息
-java -cp target/classes client.SimpleConsumer
-```
+> 需提前安装好 JDK 8 和 Maven
 
 ---
 
 ### 📌 学习重点 & 注释说明
-
-每个模块的关键类、方法中均添加了详细注释。例如：
-
-* `MappedFile.java`：模拟 RocketMQ 中使用内存映射文件进行顺序写入
-* `CommitLog.java`：消息存储与文件分段机制复刻
-* `RemotingCommand.java`：仿照 RocketMQ 网络命令封装与序列化
-* `PullMessageProcessor.java`：消费者拉取流程与偏移量管理
 
 ---
 
@@ -113,7 +85,7 @@ java -cp target/classes client.SimpleConsumer
 ### 📖 推荐配套资料
 
 * [RocketMQ 官方文档](https://rocketmq.apache.org/docs/)
-* 源码版本参考：[rocketmq-all 4.9.7](https://github.com/apache/rocketmq/tree/4.9.7)
+* 源码版本参考：[rocketmq-all 5.3.3](https://github.com/apache/rocketmq/tree/5.3.3)
 * Netty 官方入门教程
 * Java NIO 与 MappedByteBuffer 详解
 
