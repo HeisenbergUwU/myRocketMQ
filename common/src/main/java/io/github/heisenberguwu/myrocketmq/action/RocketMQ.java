@@ -1,4 +1,4 @@
-package org.example.action;
+package io.github.heisenberguwu.myrocketmq.action;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;

@@ -1,4 +1,4 @@
-package org.example;
+package io.github.heisenberguwu.myrocketmq;
 
 import org.apache.commons.lang3.StringUtils;
 

@@ -1,4 +1,4 @@
-package org.example;
+package io.github.heisenberguwu.myrocketmq;
 
 import junit.framework.Test;
 import junit.framework.TestCase;

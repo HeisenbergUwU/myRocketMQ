@@ -1,4 +1,4 @@
-package org.example.action;
+package io.github.heisenberguwu.myrocketmq.action;
 
 import com.alibaba.fastjson2.annotation.JSONField;
 import org.apache.commons.lang3.StringUtils;
