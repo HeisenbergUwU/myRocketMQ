@@ -1,6 +1,9 @@
 package io.github.heisenberguwu.myrocketmq;
 
+import io.github.heisenberguwu.myrocketmq.attribute.AttributeUtil;
+import io.github.heisenberguwu.myrocketmq.constant.GrpcConstants;
 import io.github.heisenberguwu.myrocketmq.example.spi.GreetingService;
+import io.grpc.Metadata;
 
 import java.util.*;
 
@@ -9,23 +12,9 @@ import java.util.*;
  */
 public class App {
     public static void main(String[] args) {
-//        testSPI();
+        AttributeUtil attributeUtil = new AttributeUtil();
+        System.out.println(attributeUtil);
 
-        List<String> list = new ArrayList<>(Arrays.asList("a", "b", "c"));
-        Iterator<String> it = list.iterator();  // ✅ 可以生成 Iterator
-
-        while (it.hasNext()) {
-            String s = it.next();               // 通过 Iterator 遍历 List
-            if(s.equals("a"))
-            {
-                it.remove();
-            }
-            System.out.println(s);
-        }
-
-
-
-        System.out.println(list);
     }
 
     static void testSPI() {
