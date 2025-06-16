@@ -33,6 +33,7 @@ public class AppTest
      */
     public void testApp()
     {
-        assertTrue( true );
+        String targets = "+key1=value1,+key2=value2,-key3,+key4=value4";
+
     }
 }
