@@ -18,7 +18,7 @@ public class AttributeParser {
 
     public static Map<String, String> parseToMap(String attributesModification) {
         /**
-         * 解析 Map
+         * 解析一系列的操作，添加删除的操作
          */
         if (Strings.isNullOrEmpty(attributesModification)) {
             return new HashMap<>();
@@ -29,11 +29,11 @@ public class AttributeParser {
         for (String kv : kvs) {
             String key;
             String value;
-            if (kv.contains(ATTR_KEY_VALUE_EQUAL_SIGN)) {
+            if (kv.contains(ATTR_ADD_PLUS_SIGN)) {
                 String[] splits = kv.split(ATTR_KEY_VALUE_EQUAL_SIGN);
                 key = splits[0];
                 value = splits[1];
-                if (!key.contains(ATTR_DELETE_MINUS_SIGN)) {
+                if (!key.contains(ATTR_ADD_PLUS_SIGN)) {
                     // 存在等于号，并且还是删除指令，那么就是有问题了
                     throw new RuntimeException("delete attribute format is wrong: " + key);
                 }
@@ -60,7 +60,17 @@ public class AttributeParser {
         if (attributes == null || attributes.size() == 0) {
             return "";
         }
+
         List<String> kvs = new ArrayList<>();
-        return null;
+        for (Map.Entry<String, String> entry : attributes.entrySet()) {
+
+            String value = entry.getValue();
+            if (Strings.isNullOrEmpty(value)) {
+                kvs.add(entry.getKey());
+            } else {
+                kvs.add(entry.getKey() + ATTR_KEY_VALUE_EQUAL_SIGN + entry.getValue());
+            }
+        }
+        return String.join(ATTR_ARRAY_SEPARATOR_COMMA, kvs);
     }
 }
