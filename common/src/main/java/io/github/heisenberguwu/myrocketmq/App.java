@@ -12,8 +12,7 @@ import java.util.*;
  */
 public class App {
     public static void main(String[] args) {
-        AttributeUtil attributeUtil = new AttributeUtil();
-        System.out.println(attributeUtil);
+        System.out.println();
 
     }
 
@@ -23,6 +22,10 @@ public class App {
         for (GreetingService service : loader) {
             service.greet("ChatGPT");
         }
+    }
+
+    enum A {
+        A, B, C;
     }
 
 }

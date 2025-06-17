@@ -1,32 +1,30 @@
 package io.github.heisenberguwu.myrocketmq.compression;
 
-import com.github.luben.zstd.ZstdInputStream;
-import com.github.luben.zstd.ZstdOutputStream;
-import io.github.heisenberguwu.myrocketmq.constant.LoggerName;
-import org.apache.rocketmq.logging.org.slf4j.Logger;
-import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
-public class ZstdCompressor implements Compressor {
+import io.github.heisenberguwu.myrocketmq.constant.LoggerName;
+import net.jpountz.lz4.LZ4FrameInputStream;
+import net.jpountz.lz4.LZ4FrameOutputStream;
+import org.apache.rocketmq.logging.org.slf4j.Logger;
+import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+public class Lz4Compressor implements Compressor {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
 
     @Override
     public byte[] compress(byte[] src, int level) throws IOException {
-        // 实现接口压缩
-        byte[] result = src; // 引用赋值
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        ZstdOutputStream outputStream = new ZstdOutputStream(byteArrayOutputStream, level);
+        byte[] result = src;
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream(src.length);
+        LZ4FrameOutputStream outputStream = new LZ4FrameOutputStream(byteArrayOutputStream);
         try {
             outputStream.write(src);
             outputStream.flush();
             outputStream.close();
             result = byteArrayOutputStream.toByteArray();
         } catch (IOException e) {
-            log.error("Failed to compress data by zstd", e);
+            log.error("Failed to compress data by lz4", e);
             throw e;
         } finally {
             try {
@@ -42,12 +40,12 @@ public class ZstdCompressor implements Compressor {
         byte[] result = src;
         byte[] uncompressData = new byte[src.length];
         ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(src);
-        ZstdInputStream zstdInputStream = new ZstdInputStream(byteArrayInputStream);
+        LZ4FrameInputStream lz4InputStream = new LZ4FrameInputStream(byteArrayInputStream);
         ByteArrayOutputStream resultOutputStream = new ByteArrayOutputStream(src.length);
 
         try {
             while (true) {
-                int len = zstdInputStream.read(uncompressData, 0, uncompressData.length);
+                int len = lz4InputStream.read(uncompressData, 0, uncompressData.length);
                 if (len <= 0) {
                     break;
                 }
@@ -60,12 +58,13 @@ public class ZstdCompressor implements Compressor {
             throw e;
         } finally {
             try {
-                zstdInputStream.close();
+                lz4InputStream.close();
                 byteArrayInputStream.close();
             } catch (IOException e) {
-                log.warn("Failed to close the zstd compress stream", e);
+                log.warn("Failed to close the lz4 compress stream ", e);
             }
         }
+
         return result;
     }
 }
