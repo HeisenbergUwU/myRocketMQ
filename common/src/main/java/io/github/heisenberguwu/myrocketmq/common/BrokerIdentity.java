@@ -34,9 +34,8 @@ public class BrokerIdentity {
     @ImportantField
     private String brokerClusterName = DEFAULT_CLUSTER_NAME;
     @ImportantField
-    private volatile long brokerId = MixAll.MASTER_ID;
-
-
+    private volatile long brokerId = MixAll.MASTER_ID; // 0L 是 Master
+    // 是否为容器启动
     private boolean isBrokerContainer = false;
 
     // Do not set it manually, it depends on the startup mode
@@ -99,6 +98,10 @@ public class BrokerIdentity {
         return StringUtils.isEmpty(localHostName) ? "DEFAULT_BROKER" : localHostName;
     }
 
+    /**
+     * 返回根据权威的名字
+     * @return
+     */
     public String getCanonicalName() {
         return isBrokerContainer ? "BrokerContainer" : String.format("%s_%s_%d", brokerClusterName, brokerName,
                 brokerId);
