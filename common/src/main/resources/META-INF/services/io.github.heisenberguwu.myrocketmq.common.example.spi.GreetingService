@@ -1,0 +1,2 @@
+io.github.heisenberguwu.myrocketmq.common.example.spi.impl.EnglishGreetingService
+io.github.heisenberguwu.myrocketmq.common.example.spi.impl.ChineseGreetingService
