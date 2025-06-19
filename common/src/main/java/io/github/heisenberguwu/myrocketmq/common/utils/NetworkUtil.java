@@ -5,7 +5,12 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
+import java.net.InetAddress;
+import java.net.SocketException;
 import java.nio.channels.Selector;
+import java.nio.channels.spi.SelectorProvider;
+import java.util.List;
 
 public class NetworkUtil {
     public static final String OS_NAME = System.getProperty("os.name"); // 通过JVM参数获取操作系统
@@ -34,8 +39,15 @@ public class NetworkUtil {
         return isLinuxPlatform;
     }
 
+    /**
+     * SelectionKey 选择器 ** Selector ** 的获取方法
+     * Selector - 监听事件 - SelectionKey - 绑定Channel - Channel - 封装 - Socket
+     * @return
+     * @throws IOException
+     */
     public static Selector openSelector() throws IOException {
         Selector result = null;
+
         if (isLinuxPlatform()) {
             try {
                 /**
@@ -50,11 +62,37 @@ public class NetworkUtil {
                  * 但是 JDK 其他版本的不一定使用的是 Epoll
                  */
                 final Class<?> providerClazz = Class.forName("sun.nio.ch.EPollSelectorProvider");
+                try {
+                    // 获取 provider() 静态方法，这里是无参数的。
+                    // 举个例子，如果我想要第一个参数是String 第二个参数是int的provider方法
+                    // providerClazz.getMethod("provider",String.class,int.class)
+                    final Method method = providerClazz.getMethod("provider");
+                    // 调用静态方法，obj参数为null 是因为调用的是静态方法。
 
-            } catch (ClassNotFoundException e) {
-                throw new RuntimeException(e);
+                    final SelectorProvider selectorProvider = (SelectorProvider) method.invoke(null);
+                    // 通过提供者返回，AbstractSelector的实例，如果执行到这里肯定是EpollSelectorxxxxx
+                    if (selectorProvider != null) {
+                        result = selectorProvider.openSelector();
+                    }
+                } catch (final Exception e) {
+                    // final 的意图就是额外保证在未来的异常传递中不要被修改了，这只是一种风格。
+                    log.warn("Open ePoll Selector for linux platform exception", e);
+                }
+            } catch (final Exception e) {
+                // ignore
             }
         }
+
+        // 如果上面一顿骚操作失败了，那么就老老实实创建一个 selector
+        if (result == null) {
+            result = Selector.open();
+        }
+
+        return result;
+    }
+
+    public static List<InetAddress getLocalInetAddressList() throws SocketException
+    {
 
     }
 }
