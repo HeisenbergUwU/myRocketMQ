@@ -20,18 +20,25 @@ RocketMQ 是阿里巴巴开源的分布式消息中间件，现已成为 Apache 
 ---
 
 ### 🧩 项目结构
+RocketMQ 开源项目的整体结构
 
-```bash
-rocketmq-reproduce/
-├── namesrv/                # NameServer 模块复现
-├── broker/                 # Broker 核心组件模拟
-├── client/                 # Producer 和 Consumer 的简单实现
-├── common/                 # 公共工具类（配置、日志、序列化等）
-├── store/                  # CommitLog 存储和 MappedFile 管理
-├── net/                    # Netty 通信协议封装与 Command 结构
-├── test/                   # 单元测试与调试用例
-└── README.md
-```
+| **目录**                       | **作用与功能说明**                                   |
+| ---------------------------- | --------------------------------------------- |
+| **broker/**                  | Broker 核心模块：启动流程、消息接收、存储、消费、主备 HA、集群治理等       |
+| **namesrv/**                 | NameServer 模块：服务注册发现、心跳管理、路由信息维护              |
+| **client/**                  | 客户端 API：Producer/Consumer 的发送、拉取、事务、过滤逻辑      |
+| **common/**                  | 公共模块：协议定义、配置解析、序列化、线程池、日志等工具类                 |
+| **remoting/**                | 通信层：基于 Netty 实现 RPC 请求/响应、连接管理、消息封装           |
+| **store/**                   | 存储核心：CommitLog、ConsumeQueue、IndexFile、刷盘与检索机制 |
+| **filter/** & **filtersrv/** | 过滤模块：消息过滤机制与 Filter Server 支持                 |
+| **openmessaging/**           | OpenMessaging 标准支持层：兼容并接入多协议                  |
+| **logappender/**             | 日志收集上报模块：集群日志传输与分析支持                          |
+| **tools/**                   | 管理命令与脚本：mqadmin、监控脚本、tools.sh 等               |
+| **example/**                 | 示例代码：常见业务场景演示，快速上手                            |
+| **test/**                    | 自动化测试：单元测试与集成测试验证各模块                          |
+| **style/**                   | 代码规范：Checkstyle 配置与代码格式指引                     |
+| **distribution/**、**dev/** 等 | 部署包与开发辅助资源，如构建脚本、文档样例                         |
+
 
 ---
 
