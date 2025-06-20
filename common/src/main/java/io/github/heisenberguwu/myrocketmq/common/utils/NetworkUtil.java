@@ -7,9 +7,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
+import java.net.*;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.ArrayList;
@@ -128,6 +126,30 @@ public class NetworkUtil {
             if (is)
         }
     }
+
+    public static SocketAddress string2SocketAddress(final String addr) {
+        // ip字符串转换 SocketAddress 对象
+        int split = addr.lastIndexOf(":");
+        String host = addr.substring(0, split);
+        String port = addr.substring(split + 1);
+        return new InetSocketAddress(host, Integer.parseInt(port));
+    }
+
+    public static String socketAddress2String(final SocketAddress addr) {
+        StringBuilder sb = new StringBuilder();
+        // 强转为 Inet 类型具有诸如 getHostName()、getPort()、getAddress() 等功能
+        InetSocketAddress inetSocketAddress = (InetSocketAddress) addr;
+        sb.append(inetSocketAddress.getAddress().getHostAddress()); // IP 地址
+        sb.append(":");
+        sb.append(inetSocketAddress.getPort()); // 端口号
+        return sb.toString();
+    }
+
+
+    public static String convert2IpString(final String addr) {
+        return socketAddress2String(string2SocketAddress(addr));
+    }
+
 
     private static boolean isBridge(NetworkInterface networkInterface) {
         // 在 Linux /sys/class/net/xxx/bridge 下面有文件描述符，那么就是桥接网卡
