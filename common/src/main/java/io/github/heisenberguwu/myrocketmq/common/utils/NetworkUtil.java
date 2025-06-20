@@ -1,6 +1,8 @@
 package io.github.heisenberguwu.myrocketmq.common.utils;
 
+import io.github.heisenberguwu.myrocketmq.common.UtilAll;
 import io.github.heisenberguwu.myrocketmq.common.constant.LoggerName;
+import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
@@ -108,7 +110,7 @@ public class NetworkUtil {
 
     // 获取当前主机上所有“正常启用的物理网卡”所绑定的合法 IP 地址（IPv4 和 IPv6）列表。
     public static List<InetAddress> getLocalInetAddressList() throws SocketException {
-        Enumeration<NetworkInterface> enumeration = NetworkInterface.getNetworkInterfaces();
+        Enumeration<NetworkInterface> enumeration = NetworkInterface.getNetworkInterfaces(); // 拿到一个网卡
         ArrayList<InetAddress> inetAddressList = new ArrayList<>();
         /*
         跳过以下网络接口：
@@ -123,7 +125,92 @@ public class NetworkUtil {
          */
         while (enumeration.hasMoreElements()) {
             final NetworkInterface nif = enumeration.nextElement();
-            if (is)
+            // 是否桥接（Linux去查文件） || 是否虚拟网卡 || 是否是P2P(许多 P2P 接口（如 ppp0, tun0/utun7 等）并非真正用于进程间通信的网络路径) || 没开启
+            if (isBridge(nif) || nif.isVirtual() || nif.isPointToPoint() || !nif.isUp()) {
+                continue;
+            }
+            // 判断是否为合法的IP地址
+            InetAddressValidator validator = InetAddressValidator.getInstance();
+            // 一个网卡拥有多个地址 IP4 IP6
+            final Enumeration<InetAddress> en = nif.getInetAddresses();
+            while (en.hasMoreElements()) {
+                final InetAddress address = en.nextElement();
+                if (address instanceof Inet4Address) {
+                    byte[] ipByte = address.getAddress();
+                    if (ipByte.length == 4) {
+                        if (validator.isValidInet4Address(UtilAll.ipToIPv4Str(ipByte))) {
+                            inetAddressList.add(address);
+                        }
+                    }
+                } else if (address instanceof Inet6Address) {
+                    byte[] ipByte = address.getAddress();
+                    if (ipByte.length == 16) {
+                        if (validator.isValidInet6Address(UtilAll.ipToIPv6Str(ipByte))) {
+                            inetAddressList.add(address);
+                        }
+                    }
+                }
+            }
+        }
+        return inetAddressList;
+    }
+
+    public static InetAddress getLocalInetAddress() {
+        try {
+            ArrayList<InetAddress> ipv4Result = new ArrayList<>();
+            ArrayList<InetAddress> ipv6Result = new ArrayList<>();
+            List<InetAddress> localInetAddressList = getLocalInetAddressList();
+            for (InetAddress inetAddress : localInetAddressList) {
+                if (inetAddress.isLoopbackAddress()) {
+                    /**
+                     * ✅ 什么是回环地址？
+                     * IPv4：127.0.0.0/8 网段（通常是 127.0.0.1）。
+                     * IPv6：::1。
+                     */
+                    continue;
+                }
+                if (inetAddress instanceof Inet6Address) {
+                    ipv6Result.add(inetAddress);
+                } else {
+                    ipv4Result.add(inetAddress);
+                }
+            }
+            // 优选 ipv4
+            if (!ipv4Result.isEmpty()) {
+                for (InetAddress ip : ipv4Result) {
+                    if (UtilAll.isInternalIP(ip.getAddress())) {
+                        continue;
+                    }
+                    return ip;
+                }
+                return ipv4Result.get(ipv4Result.size() - 1);
+            } else if (!ipv6Result.isEmpty()) {
+                for (InetAddress ip : ipv6Result) {
+                    if (UtilAll.isInternalV6IP(ip)) {
+                        continue;
+                    }
+                    return ip;
+                }
+                return ipv6Result.get(0);
+            }
+            // 如果都失败了 那就退化到 localhost 吧.loopback
+            return Inet4Address.getLocalHost();
+        } catch (Exception e) {
+            log.error("Failed to obtain local address", e);
+        }
+        return null;
+    }
+
+    public static String getLocalAddress() {
+        InetAddress localHost = getLocalInetAddress();
+        return normalizeHostAddress(localHost);
+    }
+
+    public static String normalizeHostAddress(final InetAddress localHost) {
+        if (localHost instanceof Inet6Address) {
+            return "[" + localHost.getHostAddress() + "]";
+        } else {
+            return localHost.getHostAddress();
         }
     }
 
