@@ -128,6 +128,7 @@ public class ThreadUtils {
 
     /**
      * 优雅的关闭线程
+     *
      * @param t
      * @param millis
      */
@@ -146,14 +147,45 @@ public class ThreadUtils {
 
     /**
      * 优雅的关闭线程池。
+     *
      * @param executor
      * @param timeout
      * @param timeUnit
      */
-    public static void shutdownGracefully(ExecutorService executor, long timeout, TimeUnit timeUnit)
-    {
-        executor.shutdown();
+    public static void shutdownGracefully(ExecutorService executor, long timeout, TimeUnit timeUnit) {
+        executor.shutdown(); // 线程池关闭
+        try {
+            if (!executor.awaitTermination(timeout, timeUnit)) {
+                executor.shutdown();
+                // Wait a while for tasks from being to terminate.
+                if (!executor.awaitTermination(timeout, timeUnit)) {
+                    LOGGER.warn(String.format("%s didn't terminate!", executor));
+                }
+            }
+        } catch (InterruptedException e) { // 异常并不是发生在线程池内部，而是【主线程】在等待线程池关闭的时候被打断了。
+            // (Re-)Cancel if current thread also interrupted.
+            executor.shutdownNow();
+            // Preserve interrupt status.
+            Thread.currentThread().interrupt();
+        }
     }
 
+    /**
+     * Shutdown the specific ExecutorService
+     *
+     * @param executorService
+     */
+    public static void shutdown(ExecutorService executorService) {
+        if (executorService != null) {
+            executorService.shutdown();
+        }
+    }
 
+    /**
+     * A constructor to stop this class being constructed.
+     */
+    private ThreadUtils() {
+        // Unused
+
+    }
 }
