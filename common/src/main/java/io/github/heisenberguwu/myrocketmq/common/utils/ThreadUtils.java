@@ -1,5 +1,6 @@
 package io.github.heisenberguwu.myrocketmq.common.utils;
 
+import io.github.heisenberguwu.myrocketmq.common.ThreadFactoryImpl;
 import io.github.heisenberguwu.myrocketmq.common.constant.LoggerName;
 import io.github.heisenberguwu.myrocketmq.common.thread.FutureTaskExtThreadPoolExecutor;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
@@ -100,4 +101,59 @@ public class ThreadUtils {
                                                         final boolean isDaemon) {
         return new ThreadFactoryImpl(String.format("%s_%d_", processName, threads), isDaemon);
     }
+
+    /**
+     * 创建一个未启动的线程
+     *
+     * @param name     The name of the thread
+     * @param runnable The work for the thread to do
+     * @param daemon   Should the thread block JVM stop?
+     * @return The unstarted thread
+     */
+    public static Thread newThread(String name, Runnable runnable, boolean daemon) {
+        Thread thread = new Thread(runnable, name);
+        thread.setDaemon(daemon);
+        // 未捕获异常回调。
+        thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            public void uncaughtException(Thread t, Throwable e) {
+                LOGGER.error("Uncaught exception in thread '" + t.getName() + "':", e);
+            }
+        });
+        return thread;
+    }
+
+    public static void shutdownGracefully(final Thread t) {
+        shutdownGracefully(t, 0);
+    }
+
+    /**
+     * 优雅的关闭线程
+     * @param t
+     * @param millis
+     */
+    public static void shutdownGracefully(final Thread t, final long millis) {
+        if (t == null)
+            return;
+        while (t.isAlive()) {
+            try {
+                t.interrupt(); // 中断线程，这是请求中断，并不是立刻关闭【设定中断状态】
+                t.join(millis); // 等待线程响应
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /**
+     * 优雅的关闭线程池。
+     * @param executor
+     * @param timeout
+     * @param timeUnit
+     */
+    public static void shutdownGracefully(ExecutorService executor, long timeout, TimeUnit timeUnit)
+    {
+        executor.shutdown();
+    }
+
+
 }

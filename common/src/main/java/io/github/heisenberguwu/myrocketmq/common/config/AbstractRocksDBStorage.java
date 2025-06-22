@@ -1,6 +1,7 @@
 package io.github.heisenberguwu.myrocketmq.common.config;
 
 import io.github.heisenberguwu.myrocketmq.common.constant.LoggerName;
+import io.github.heisenberguwu.myrocketmq.common.utils.ThreadUtils;
 import io.netty.buffer.PooledByteBufAllocator;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
@@ -58,6 +59,6 @@ public class AbstractRocksDBStorage {
 
     // 信号灯锁
     private final Semaphore reloadPermit = new Semaphore(1);
-    ThreadUtils.
+    ThreadUtils.newScheduledThreadPool(1, new ThreadFactoryImpl("RocksDBStorageReloadService_"));
 }
 
