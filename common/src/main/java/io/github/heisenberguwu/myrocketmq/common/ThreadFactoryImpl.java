@@ -55,6 +55,4 @@ public class ThreadFactoryImpl implements ThreadFactory {
 
         return thread;
     }
-
-
 }

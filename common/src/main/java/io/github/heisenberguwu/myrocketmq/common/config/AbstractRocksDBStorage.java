@@ -1,5 +1,6 @@
 package io.github.heisenberguwu.myrocketmq.common.config;
 
+import io.github.heisenberguwu.myrocketmq.common.ThreadFactoryImpl;
 import io.github.heisenberguwu.myrocketmq.common.constant.LoggerName;
 import io.github.heisenberguwu.myrocketmq.common.utils.ThreadUtils;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -9,7 +10,7 @@ import org.rocksdb.*;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.*;
 
 public class AbstractRocksDBStorage {
 
@@ -59,6 +60,71 @@ public class AbstractRocksDBStorage {
 
     // 信号灯锁
     private final Semaphore reloadPermit = new Semaphore(1);
-    ThreadUtils.newScheduledThreadPool(1, new ThreadFactoryImpl("RocksDBStorageReloadService_"));
-}
 
+    private final ScheduledExecutorService reloadScheduler = ThreadUtils.newScheduledThreadPool(1, new ThreadFactoryImpl("RocksDBStorageReloadService_"));
+
+    private final ThreadPoolExecutor manualCompactionThread = (ThreadPoolExecutor) ThreadUtils.newThreadPoolExecutor(
+            1, 1, 1000 * 60, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(1), new ThreadFactoryImpl("RocksDBManualCompactionService_")
+
+    );
+
+    static {
+        // 在类加载时自动执行一次 JNI 库加载操作，为 RocksDB 提供底层 C++ 支持
+        RocksDB.loadLibrary(); // 加载动态链接库，如果不加载那么调用所有的API都报错
+    }
+
+    public AbstractRocksDBStorage(String dbPath) {
+        this.dbPath = dbPath;
+    }
+
+    protected void initOptions() {
+        initWriteOptions();
+        initAbleWalWriteOptions();
+        initReadOptions();
+        initTotalOrderReadOptions();
+        initCompactRangeOptions();
+        initCompactionOptions();
+    }
+
+    /**
+     * WAL 关闭
+     */
+    protected void initWriteOptions()
+    {
+        this.writeOptions = new WriteOptions();
+        this.writeOptions.setSync(false);// 异步写入
+        this.writeOptions.setDisableWAL(true); // 不禁用 预写日志
+        this.writeOptions.setNoSlowdown(false); // 阻塞等待 RocksDB 释放资源再继续写入（默认行为）。
+    }
+
+    /**
+     * WAL 开启
+     * | 项目        | WAL 关闭 (`setDisableWAL(true)`) | WAL 开启 (`setDisableWAL(false)`) |
+     * | --------- | ------------------------------ | ------------------------------- |
+     * | **写入性能**  | 更快（少一次写磁盘）                     | 略慢（需写 WAL）                      |
+     * | **数据安全性** | 崩溃可能丢失数据（即使写入成功）               | 崩溃后可通过 WAL 恢复                   |
+     * | **使用场景**  | 临时数据、缓存、可丢数据的业务                | 需要强一致性、不能丢数据的业务                 |
+     */
+    protected void initAbleWalWriteOptions()
+    {
+        this.ableWalWriteOptions = new WriteOptions();
+        this.ableWalWriteOptions.setSync(false);
+        this.ableWalWriteOptions.setDisableWAL(false);
+        // https://github.com/facebook/rocksdb/wiki/Write-Stalls
+        this.ableWalWriteOptions.setNoSlowdown(false);
+    }
+
+    protected void initReadOptions()
+    {
+        this.readOptions = new ReadOptions();
+        this.readOptions.setPrefixSameAsStart(true); // 前缀匹配优化 iterator.seek("user:123"); 只会在user: 范围内查找
+        this.readOptions.setTotalOrderSeek(false); // 不允许跨SST文件、跨memtable的全表扫描，只能在当前 prefix 范围或 current SST/memtable 范围内扫描
+        /**
+         * Tailing Iterator 用于实时消费新增数据，比如：
+         * - 从 RocksDB 的最新位置不断读取新增写入的 key
+         * - 类似“流式读取”或“变更订阅”
+         */
+        this.readOptions.setTailing(false); // 是否监听日志
+    }
+}
