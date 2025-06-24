@@ -9,6 +9,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 import java.net.Inet4Address;
+import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 public class BrokerIdentity {
@@ -20,7 +21,7 @@ public class BrokerIdentity {
 
     static {
         try {
-            localHostName = Inet4Address.getLocalHost().getHostName();
+            localHostName = InetAddress.getLocalHost().getHostName();
         } catch (UnknownHostException e) {
             LOGGER.error("Failed to obtain the host name", e);
         }
@@ -34,8 +35,8 @@ public class BrokerIdentity {
     @ImportantField
     private String brokerClusterName = DEFAULT_CLUSTER_NAME;
     @ImportantField
-    private volatile long brokerId = MixAll.MASTER_ID; // 0L 是 Master
-    // 是否为容器启动
+    private volatile long brokerId = MixAll.MASTER_ID;
+
     private boolean isBrokerContainer = false;
 
     // Do not set it manually, it depends on the startup mode
@@ -98,10 +99,6 @@ public class BrokerIdentity {
         return StringUtils.isEmpty(localHostName) ? "DEFAULT_BROKER" : localHostName;
     }
 
-    /**
-     * 返回根据权威的名字
-     * @return
-     */
     public String getCanonicalName() {
         return isBrokerContainer ? "BrokerContainer" : String.format("%s_%s_%d", brokerClusterName, brokerName,
                 brokerId);
