@@ -36,6 +36,7 @@ public class GenericMapSuperclassDeserializer implements ObjectDeserializer {
         ParameterizedType parameterizedType = (ParameterizedType) genericSuperclass;
         Type keyType = parameterizedType.getActualTypeArguments()[0];
         Type valueType = parameterizedType.getActualTypeArguments()[1];
+        System.out.println("++++++++++++++++++++++++++++++");
         // 分支调用解释器
         if (String.class == keyType) {
             // 如果键是字符串，走优化路径（Map<String, Object>）；

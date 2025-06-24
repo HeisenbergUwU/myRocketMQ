@@ -1,9 +1,12 @@
 package org.example;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.parser.DefaultJSONParser;
+import com.alibaba.fastjson.parser.ParserConfig;
 import com.alibaba.fastjson2.JSONException;
 import org.example.fastjson.GenericMapSuperclassDeserializer;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class testJsonDeserializer {
@@ -26,32 +29,17 @@ public class testJsonDeserializer {
         }
     }
 
-    private static <T> void testDeserialization(String json, Class<T> clazz, GenericMapSuperclassDeserializer deserializer) {
-        System.out.println("=== Test deserialization into " + clazz.getSimpleName() + " ===");
-        // 创建 DefaultJSONParser
-        DefaultJSONParser parser = new DefaultJSONParser(json);
-        try {
-            T result = deserializer.deserialze(parser, clazz, null);
-            System.out.println("Deserialization result: " + result);
-        } catch (JSONException e) {
-            System.err.println("Deserialization failed: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            parser.close();
-        }
-
-    }
-
 
     public static void main(String[] args) {
-        GenericMapSuperclassDeserializer deserializer = new GenericMapSuperclassDeserializer();
-        // 测试1：反序列化 Map<String, Object>
-        String json1 = "{\"key1\":\"value1\", \"key2\":123}";
-        testDeserialization(json1, MyStringObjectMap.class, deserializer);
+        // 1. 准备 JSON
+        String json = "{\"a\":1,\"b\":2,\"c\":3}";
 
-        // 测试2：反序列化 Map<Long, Foo>
-        String json2 = "{\"100\": {\"id\": 1, \"name\": \"foo1\"}, \"200\": {\"id\": 2, \"name\": \"foo2\"}}";
-        testDeserialization(json2, MyLongFooMap.class, deserializer);
+        // 2. 注册自定义反序列化器
+        ParserConfig config = new ParserConfig();
+        config.putDeserializer(HashMap.class,GenericMapSuperclassDeserializer.INSTANCE);
 
+        // 3. 调用 fastJson 解析
+        HashMap result = JSON.parseObject(json, HashMap.class, config);
+        System.out.println(result);
     }
 }
