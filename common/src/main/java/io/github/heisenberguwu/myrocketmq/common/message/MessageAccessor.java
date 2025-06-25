@@ -2,7 +2,7 @@ package io.github.heisenberguwu.myrocketmq.common.message;
 
 import java.util.HashMap;
 import java.util.Map;
-
+// Message 的包装器模式
 public class MessageAccessor {
 
     public static void clearProperty(final Message msg, final String name) {
