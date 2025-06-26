@@ -1,5 +1,8 @@
 package org.example;
 
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
@@ -7,7 +10,20 @@ import java.util.Arrays;
  *
  */
 public class testByteBuffer {
-    public static void main(String[] args) {
+
+
+    public static String createMessageId(final ByteBuffer input, final ByteBuffer addr, final long offset) {
+        input.flip(); // position -> 0
+        int msgIDLength = addr.limit() == 8 ? 16 : 28; // IPv4 8字节  IPv6 20 字节
+
+        input.limit(msgIDLength);
+        input.put(addr);
+        input.putLong(offset);
+        return Arrays.toString(input.array());
+    }
+
+
+    public static void main(String[] args) throws UnknownHostException {
         // 初始化缓冲区 pos 0; limit : capacity; capacity 是我设定的 10
         ByteBuffer allocate = ByteBuffer.allocate(10);
         System.out.println("=== BB 初始化");
@@ -69,5 +85,26 @@ public class testByteBuffer {
         System.out.println("= BB limit: " + allocate.limit());
         System.out.println("= BB capacity: " + allocate.capacity());
         System.out.println("= " + Arrays.toString(allocate.array()));
+
+        ByteBuffer in = ByteBuffer.allocate(128);
+        InetAddress localHost = Inet4Address.getLocalHost();
+        System.out.println("=== in 初始化");
+        System.out.println("= in position: " + in.position());
+        System.out.println("= in limit: " + in.limit());
+        System.out.println("= in capacity: " + in.capacity());
+        System.out.println("= " + Arrays.toString(in.array()));
+
+        byte[] address = localHost.getAddress();
+        ByteBuffer wrap = ByteBuffer.wrap(address);
+
+        System.out.println("=== wrap 初始化");
+        System.out.println("= wrap position: " + wrap.position());
+        System.out.println("= wrap limit: " + wrap.limit());
+        System.out.println("= wrap capacity: " + wrap.capacity());
+        System.out.println("= " + Arrays.toString(wrap.array()));
+//
+//        createMessageId(in,wrap,20);
+        anInt = wrap.getInt();
+        System.out.println(anInt);
     }
 }

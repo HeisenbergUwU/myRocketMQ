@@ -301,6 +301,11 @@ public class UtilAll {
         return (int) (crc32.getValue() & 0x7FFFFFFF);
     }
 
+    /**
+     * 将字节数组转换为十六进制字符串
+     * @param src
+     * @return
+     */
     public static String bytes2string(byte[] src) {
         char[] hexChars = new char[src.length * 2];
         for (int j = 0; j < src.length; j++) {
