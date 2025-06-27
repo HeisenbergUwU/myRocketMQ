@@ -5,6 +5,7 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 public class testByteBuf {
     public static void main(String[] args) {
@@ -15,17 +16,27 @@ public class testByteBuf {
         unpooledBuffer.release();
 
         PooledByteBufAllocator aDefault = PooledByteBufAllocator.DEFAULT;
-        try{
+        try {
             ByteBuf buffer = aDefault.buffer(10);
             buffer.writeBytes("import io.netty.buffer.PooledByteBufAllocator;我草".getBytes(StandardCharsets.UTF_8));
             System.out.println(buffer.writerIndex());
             System.out.println(buffer.readBytes(15).array().toString());
-        } catch (Exception e)
-        {
+        } catch (Exception e) {
             // ignore
+            System.out.println(e);
         }
 
-        buffer.writeBytes("你大爷的".getBytes(StandardCharsets.UTF_8));
-        System.out.println(buffer.writerIndex());
+        ByteBuf byteBuf = aDefault.heapBuffer(16);
+        byteBuf.writeBytes("Hello world;".getBytes(StandardCharsets.UTF_8));
+        /**
+         * Exception in thread "main" java.lang.IndexOutOfBoundsException: readerIndex(0) + length(13) exceeds writerIndex(12): PooledUnsafeHeapByteBuf(ridx: 0, widx: 12, cap: 16)
+         * 	at io.netty.buffer.AbstractByteBuf.checkReadableBytes0(AbstractByteBuf.java:1442)
+         * 	at io.netty.buffer.AbstractByteBuf.checkReadableBytes(AbstractByteBuf.java:1428)
+         * 	at io.netty.buffer.AbstractByteBuf.readBytes(AbstractByteBuf.java:866)
+         * 	at org.example.testByteBuf.main(testByteBuf.java:31)
+         */
+        System.out.println(byteBuf.readBytes(13));
+        System.out.println(byteBuf.readerIndex());
+        System.out.println(byteBuf.writerIndex());
     }
 }
