@@ -1,6 +1,8 @@
 package io.github.heisenberguwu.myrocketmq.common.message;
 
 import io.github.heisenberguwu.myrocketmq.common.UtilAll;
+import io.github.heisenberguwu.myrocketmq.common.compression.Compressor;
+import io.github.heisenberguwu.myrocketmq.common.compression.CompressorFactory;
 import io.github.heisenberguwu.myrocketmq.common.sysflag.MessageSysFlag;
 import io.netty.buffer.ByteBuf;
 
@@ -8,6 +10,7 @@ import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
 
 public class MessageDecoder {
@@ -203,14 +206,15 @@ public class MessageDecoder {
 
 
     public static byte[] encode(MessageExt messageExt, boolean needCompress) throws Exception {
-        byte[] body = messageExt.getBody();
-        byte[] topics = messageExt.getTopic().getBytes(CHARSET_UTF8);
-        byte topicLen = (byte) topics.length;
+        byte[] body = messageExt.getBody(); // 消息主体
+        byte[] topics = messageExt.getTopic().getBytes(CHARSET_UTF8); // topic
+        byte topicLen = (byte) topics.length; // 这里说明 TOPIC 也不能定义的太长了。
         String properties = messageProperties2String(messageExt.getProperties());
         byte[] propertiesBytes = properties.getBytes(CHARSET_UTF8);
+        // 消息中属性长度字段固定式 2 字节
         short propertiesLength = (short) propertiesBytes.length;
         int sysFlag = messageExt.getSysFlag();
-        int bornhostLength = (sysFlag & MessageSysFlag.BORNHOST_V6_FLAG) == 0 ? 8 : 20;
+        int bornhostLength = (sysFlag & MessageSysFlag.BORNHOST_V6_FLAG) == 0 ? 8 : 20;  //
         int storehostAddressLength = (sysFlag & MessageSysFlag.STOREHOSTADDRESS_V6_FLAG) == 0 ? 8 : 20;
         byte[] newBody = messageExt.getBody();
         if (needCompress && (sysFlag & MessageSysFlag.COMPRESSED_FLAG) == MessageSysFlag.COMPRESSED_FLAG) {
@@ -219,98 +223,7 @@ public class MessageDecoder {
         }
         int bodyLength = newBody.length;
         int storeSize = messageExt.getStoreSize();
-        ByteBuffer byteBuffer;
-        if (storeSize > 0) {
-            byteBuffer = ByteBuffer.allocate(storeSize);
-        } else {
-            storeSize = 4 // 1 TOTALSIZE
-                    + 4 // 2 MAGICCODE
-                    + 4 // 3 BODYCRC
-                    + 4 // 4 QUEUEID
-                    + 4 // 5 FLAG
-                    + 8 // 6 QUEUEOFFSET
-                    + 8 // 7 PHYSICALOFFSET
-                    + 4 // 8 SYSFLAG
-                    + 8 // 9 BORNTIMESTAMP
-                    + bornhostLength // 10 BORNHOST
-                    + 8 // 11 STORETIMESTAMP
-                    + storehostAddressLength // 12 STOREHOSTADDRESS
-                    + 4 // 13 RECONSUMETIMES
-                    + 8 // 14 Prepared Transaction Offset
-                    + 4 + bodyLength // 14 BODY
-                    + 1 + topicLen // 15 TOPIC
-                    + 2 + propertiesLength // 16 propertiesLength
-                    + 0;
-            byteBuffer = ByteBuffer.allocate(storeSize);
-        }
-        // 1 TOTALSIZE
-        byteBuffer.putInt(storeSize);
 
-        // 2 MAGICCODE
-        byteBuffer.putInt(MESSAGE_MAGIC_CODE);
-
-        // 3 BODYCRC
-        int bodyCRC = messageExt.getBodyCRC();
-        byteBuffer.putInt(bodyCRC);
-
-        // 4 QUEUEID
-        int queueId = messageExt.getQueueId();
-        byteBuffer.putInt(queueId);
-
-        // 5 FLAG
-        int flag = messageExt.getFlag();
-        byteBuffer.putInt(flag);
-
-        // 6 QUEUEOFFSET
-        long queueOffset = messageExt.getQueueOffset();
-        byteBuffer.putLong(queueOffset);
-
-        // 7 PHYSICALOFFSET
-        long physicOffset = messageExt.getCommitLogOffset();
-        byteBuffer.putLong(physicOffset);
-
-        // 8 SYSFLAG
-        byteBuffer.putInt(sysFlag);
-
-        // 9 BORNTIMESTAMP
-        long bornTimeStamp = messageExt.getBornTimestamp();
-        byteBuffer.putLong(bornTimeStamp);
-
-        // 10 BORNHOST
-        InetSocketAddress bornHost = (InetSocketAddress) messageExt.getBornHost();
-        byteBuffer.put(bornHost.getAddress().getAddress());
-        byteBuffer.putInt(bornHost.getPort());
-
-        // 11 STORETIMESTAMP
-        long storeTimestamp = messageExt.getStoreTimestamp();
-        byteBuffer.putLong(storeTimestamp);
-
-        // 12 STOREHOST
-        InetSocketAddress serverHost = (InetSocketAddress) messageExt.getStoreHost();
-        byteBuffer.put(serverHost.getAddress().getAddress());
-        byteBuffer.putInt(serverHost.getPort());
-
-        // 13 RECONSUMETIMES
-        int reconsumeTimes = messageExt.getReconsumeTimes();
-        byteBuffer.putInt(reconsumeTimes);
-
-        // 14 Prepared Transaction Offset
-        long preparedTransactionOffset = messageExt.getPreparedTransactionOffset();
-        byteBuffer.putLong(preparedTransactionOffset);
-
-        // 15 BODY
-        byteBuffer.putInt(bodyLength);
-        byteBuffer.put(newBody);
-
-        // 16 TOPIC
-        byteBuffer.put(topicLen);
-        byteBuffer.put(topics);
-
-        // 17 properties
-        byteBuffer.putShort(propertiesLength);
-        byteBuffer.put(propertiesBytes);
-
-        return byteBuffer.array();
     }
 
     public static byte[] encodeUniquely(MessageExt messageExt, boolean needCompress) throws IOException {
@@ -411,5 +324,87 @@ public class MessageDecoder {
 
         return byteBuffer.array();
     }
+
+    public static MessageExt decode(
+            ByteBuffer byteBuffer, final boolean readBody, final boolean deCompressBody) {
+        return decode(byteBuffer, readBody, deCompressBody, false);
+    }
+
+    public static MessageExt decode(
+            java.nio.ByteBuffer byteBuffer, final boolean readBody, final boolean deCompressBody, final boolean isClient) {
+        return decode(byteBuffer, readBody, deCompressBody, isClient, false, false);
+    }
+
+    public static MessageExt decode(
+            java.nio.ByteBuffer byteBuffer, final boolean readBody, final boolean deCompressBody, final boolean isClient,
+            final boolean isSetPropertiesString) {
+        return decode(byteBuffer, readBody, deCompressBody, isClient, isSetPropertiesString, false);
+    }
+
+    public static MessageExt decode(
+            java.nio.ByteBuffer byteBuffer, final boolean readBody, final boolean deCompressBody, final boolean isClient,
+            final boolean isSetPropertiesString, final boolean checkCRC) {
+        MessageExt msgExt;
+
+    }
+
+    public static String messageProperties2String(Map<String, String> properties) {
+        if (properties == null) {
+            return "";
+        }
+        int len = 0;
+        for (final Map.Entry<String, String> entry : properties.entrySet()) {
+            final String name = entry.getKey();
+            final String value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+            if (name != null) {
+                len += name.length();
+            }
+            len += value.length();
+            len += 2; // separator
+        }
+        StringBuilder sb = new StringBuilder(len);
+        for (final Map.Entry<String, String> entry : properties.entrySet()) {
+            final String name = entry.getKey();
+            final String value = entry.getValue();
+
+            if (value == null) {
+                continue;
+            }
+            sb.append(name);
+            sb.append(NAME_VALUE_SEPARATOR);
+            sb.append(value);
+            sb.append(PROPERTY_SEPARATOR);
+        }
+        return sb.toString();
+    }
+
+
+    public static Map<String, String> string2messageProperties(final String properties) {
+        Map<String, String> map = new HashMap<>(128);
+        if (properties != null) {
+            int len = properties.length();
+            int index = 0;
+            while (index < len) {
+                int newIndex = properties.indexOf(PROPERTY_SEPARATOR, index);
+                if (newIndex < 0) {
+                    newIndex = len;
+                }
+                if (newIndex - index >= 3) {
+                    int kvSepIndex = properties.indexOf(NAME_VALUE_SEPARATOR, index);
+                    if (kvSepIndex > index && kvSepIndex < newIndex - 1) {
+                        String k = properties.substring(index, kvSepIndex);
+                        String v = properties.substring(kvSepIndex + 1, newIndex);
+                        map.put(k, v);
+                    }
+                }
+                index = newIndex + 1;
+            }
+        }
+        return map;
+    }
+
 
 }
