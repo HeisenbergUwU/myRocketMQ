@@ -443,7 +443,7 @@ public class MessageDecoder {
 
     public static MessageExt decode(
             java.nio.ByteBuffer byteBuffer, final boolean readBody, final boolean deCompressBody, final boolean isClient,
-            final boolean isSetPropertiesString, final boolean checkCRC) {
+            final boolean isSetPropertiesString, final boolean checkCRC) throws Exception {
         MessageExt msgExt;
 
         MessageExt msgExt;
@@ -518,79 +518,132 @@ public class MessageDecoder {
 
         // 15 BODY
         int bodyLen = byteBuffer.getInt();
-        if(bodyLen > 0)
-        {
-            if(readBody)
-            {
+        if (bodyLen > 0) {
+            if (readBody) {
                 byte[] body = new byte[bodyLen];
                 byteBuffer.get(body);
 
-                if(checkCRC)
-                {
-                    // crc body
-                    int crc = UtilAll.crc32(body,0,bodyLen);
-                }
-            }
-        }
-    }
-
-    public static String messageProperties2String(Map<String, String> properties) {
-        if (properties == null) {
-            return "";
-        }
-        int len = 0;
-        for (final Map.Entry<String, String> entry : properties.entrySet()) {
-            final String name = entry.getKey();
-            final String value = entry.getValue();
-            if (value == null) {
-                continue;
-            }
-            if (name != null) {
-                len += name.length();
-            }
-            len += value.length();
-            len += 2; // separator
-        }
-        StringBuilder sb = new StringBuilder(len);
-        for (final Map.Entry<String, String> entry : properties.entrySet()) {
-            final String name = entry.getKey();
-            final String value = entry.getValue();
-
-            if (value == null) {
-                continue;
-            }
-            sb.append(name);
-            sb.append(NAME_VALUE_SEPARATOR);
-            sb.append(value);
-            sb.append(PROPERTY_SEPARATOR);
-        }
-        return sb.toString();
-    }
-
-
-    public static Map<String, String> string2messageProperties(final String properties) {
-        Map<String, String> map = new HashMap<>(128);
-        if (properties != null) {
-            int len = properties.length();
-            int index = 0;
-            while (index < len) {
-                int newIndex = properties.indexOf(PROPERTY_SEPARATOR, index);
-                if (newIndex < 0) {
-                    newIndex = len;
-                }
-                if (newIndex - index >= 3) {
-                    int kvSepIndex = properties.indexOf(NAME_VALUE_SEPARATOR, index);
-                    if (kvSepIndex > index && kvSepIndex < newIndex - 1) {
-                        String k = properties.substring(index, kvSepIndex);
-                        String v = properties.substring(kvSepIndex + 1, newIndex);
-                        map.put(k, v);
+                if (checkCRC) {
+                    // crc body 只计算 message body 的 crc
+                    int crc = UtilAll.crc32(body, 0, bodyLen);
+                    if (crc != bodyCRC) {
+                        // 如果没对上
+                        throw new Exception("Msg crc is error!");
                     }
+
+                    // inflate body
+                    if (deCompressBody && (sysFlag & MessageSysFlag.COMPRESSED_FLAG) == MessageSysFlag.COMPRESSED_FLAG) {
+                        Compressor compressor = CompressorFactory.getCompressor(MessageSysFlag.getCompressionType(sysFlag));
+                        body = compressor.decompress(body);
+                        sysFlag &= ~MessageSysFlag.COMPRESSED_FLAG; // 清除压缩状态
+                    }
+
+                    msgExt.setBody(body);
+                    msgExt.setSysFlag(sysFlag);
+                } else {
+                    byteBuffer.position(byteBuffer.position() + bodyLen);
                 }
-                index = newIndex + 1;
             }
         }
-        return map;
+
+        // 16 TOPIC
+        int topicLen = version.getTopicLength(byteBuffer);
+        byte[] topic = new byte[topicLen];
+        byteBuffer.get(topic);
+        msgExt.setTopic(new String(topic, CHARSET_UTF8));
+
+        // 17 properties
+        short propertiesLength = byteBuffer.getShort();
+        if (propertiesLength > 0) {
+            byte[] properties = new byte[propertiesLength];
+            byteBuffer.get(properties);
+            String propertiesString = new String(properties, CHARSET_UTF8);
+            if (!isSetPropertiesString) {
+                Map<String, String> map = string2messageProperties(propertiesString);
+                msgExt.setProperties(map);
+            } else {
+                Map<String, String> map = string2messageProperties(propertiesString);
+                map.put("propertiesString", propertiesString);
+                msgExt.setProperties(map);
+            }
+        }
+
+        int msgIDLength = storehostIPLength + 4 + 8;
+        ByteBuffer byteBufferMsgId = ByteBuffer.allocate(msgIDLength);
+        String msgId = createMessageId(byteBufferMsgId, msgExt.getStoreHostBytes(), msgExt.getCommitLogOffset());
+        msgExt.setMsgId(msgId);
+
+        if (isClient) {
+            ((MessageClientExt) msgExt).setOffsetMsgId(msgId);
+        }
+
+        return msgExt;
+    } catch(
+    Exception e)
+
+    {
+        byteBuffer.position(byteBuffer.limit());
     }
+    return null
+}
+
+public static String messageProperties2String(Map<String, String> properties) {
+    if (properties == null) {
+        return "";
+    }
+    int len = 0;
+    for (final Map.Entry<String, String> entry : properties.entrySet()) {
+        final String name = entry.getKey();
+        final String value = entry.getValue();
+        if (value == null) {
+            continue;
+        }
+        if (name != null) {
+            len += name.length();
+        }
+        len += value.length();
+        len += 2; // separator
+    }
+    StringBuilder sb = new StringBuilder(len);
+    for (final Map.Entry<String, String> entry : properties.entrySet()) {
+        final String name = entry.getKey();
+        final String value = entry.getValue();
+
+        if (value == null) {
+            continue;
+        }
+        sb.append(name);
+        sb.append(NAME_VALUE_SEPARATOR);
+        sb.append(value);
+        sb.append(PROPERTY_SEPARATOR);
+    }
+    return sb.toString();
+}
+
+
+public static Map<String, String> string2messageProperties(final String properties) {
+    Map<String, String> map = new HashMap<>(128);
+    if (properties != null) {
+        int len = properties.length();
+        int index = 0;
+        while (index < len) {
+            int newIndex = properties.indexOf(PROPERTY_SEPARATOR, index);
+            if (newIndex < 0) {
+                newIndex = len;
+            }
+            if (newIndex - index >= 3) {
+                int kvSepIndex = properties.indexOf(NAME_VALUE_SEPARATOR, index);
+                if (kvSepIndex > index && kvSepIndex < newIndex - 1) {
+                    String k = properties.substring(index, kvSepIndex);
+                    String v = properties.substring(kvSepIndex + 1, newIndex);
+                    map.put(k, v);
+                }
+            }
+            index = newIndex + 1;
+        }
+    }
+    return map;
+}
 
 
 }
