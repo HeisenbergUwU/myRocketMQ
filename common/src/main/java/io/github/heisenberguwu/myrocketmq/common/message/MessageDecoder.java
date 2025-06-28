@@ -512,7 +512,7 @@ public class MessageDecoder {
         int reconsumeTimes = byteBuffer.getInt();
         msgExt.setReconsumeTimes(reconsumeTimes);
 
-        // 14 Prepared Transaction Offset
+        // 14 Prepared Transaction Offset 事务
         long preparedTransactionOffset = byteBuffer.getLong();
         msgExt.setPreparedTransactionOffset(preparedTransactionOffset);
 
@@ -523,6 +523,13 @@ public class MessageDecoder {
             if(readBody)
             {
                 byte[] body = new byte[bodyLen];
+                byteBuffer.get(body);
+
+                if(checkCRC)
+                {
+                    // crc body
+                    int crc = UtilAll.crc32(body,0,bodyLen);
+                }
             }
         }
     }
