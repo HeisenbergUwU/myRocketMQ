@@ -34,7 +34,7 @@ public class MessageClientIDSetter {
     /**
      * 锁定整体 class
      *
-     * @param mill
+     * @param millis
      */
     private synchronized static void setStartTime(long millis) {
         Calendar cal = Calendar.getInstance();
@@ -100,6 +100,12 @@ public class MessageClientIDSetter {
         return value & 0x0000FFFF;
     }
 
+    /**
+     * 这段 Java 静态方法 createUniqID() 的作用是生成一个全局唯一且大致按时间递增的标识字符串，
+     * 通常用于分布式系统中生成唯一 ID。
+     *
+     * @return
+     */
     public static String createUniqID() {
         char[] sb = new char[LEN * 2];
         System.arraycopy(FIX_STRING, 0, sb, 0, FIX_STRING.length);
@@ -129,7 +135,11 @@ public class MessageClientIDSetter {
         return msg.getProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX);
     }
 
-
+    /**
+     * 使用当前时间戳的后4尾作为IPv4 -- fakeIP
+     *
+     * @return
+     */
     public static byte[] createFakeIP() {
         ByteBuffer bb = ByteBuffer.allocate(8);
         bb.putLong(System.currentTimeMillis());

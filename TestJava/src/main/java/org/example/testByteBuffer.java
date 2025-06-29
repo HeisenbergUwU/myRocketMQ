@@ -106,5 +106,12 @@ public class testByteBuffer {
 //        createMessageId(in,wrap,20);
         anInt = wrap.getInt();
         System.out.println(anInt);
+
+
+        ByteBuffer bb = ByteBuffer.allocate(8);
+        bb.putLong(System.currentTimeMillis());
+        bb.position(4);
+        byte[] fakeIP = new byte[4];
+        bb.get(fakeIP);
     }
 }
