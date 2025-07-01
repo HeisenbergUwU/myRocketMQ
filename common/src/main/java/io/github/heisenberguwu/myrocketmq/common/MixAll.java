@@ -29,12 +29,19 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 
 import com.google.common.collect.ImmutableSet;
+import io.github.heisenberguwu.myrocketmq.common.annotation.ImportantField;
 import io.github.heisenberguwu.myrocketmq.common.constant.LoggerName;
+import io.github.heisenberguwu.myrocketmq.common.help.FAQUrl;
+import io.github.heisenberguwu.myrocketmq.common.topic.TopicValidator;
+import io.github.heisenberguwu.myrocketmq.common.utils.IOTinyUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**
+ * Swiss Army Knife
+ */
 public class MixAll {
     public static final String ROCKETMQ_HOME_ENV = "ROCKETMQ_HOME";
     public static final String ROCKETMQ_HOME_PROPERTY = "rocketmq.home.dir";
@@ -103,20 +110,20 @@ public class MixAll {
     private static final String OS = System.getProperty("os.name").toLowerCase();
 
     private static final Set<String> PREDEFINE_GROUP_SET = ImmutableSet.of(
-        DEFAULT_CONSUMER_GROUP,
-        DEFAULT_PRODUCER_GROUP,
-        TOOLS_CONSUMER_GROUP,
-        SCHEDULE_CONSUMER_GROUP,
-        FILTERSRV_CONSUMER_GROUP,
-        MONITOR_CONSUMER_GROUP,
-        CLIENT_INNER_PRODUCER_GROUP,
-        SELF_TEST_PRODUCER_GROUP,
-        SELF_TEST_CONSUMER_GROUP,
-        ONS_HTTP_PROXY_GROUP,
-        CID_ONSAPI_PERMISSION_GROUP,
-        CID_ONSAPI_OWNER_GROUP,
-        CID_ONSAPI_PULL_GROUP,
-        CID_SYS_RMQ_TRANS
+            DEFAULT_CONSUMER_GROUP,
+            DEFAULT_PRODUCER_GROUP,
+            TOOLS_CONSUMER_GROUP,
+            SCHEDULE_CONSUMER_GROUP,
+            FILTERSRV_CONSUMER_GROUP,
+            MONITOR_CONSUMER_GROUP,
+            CLIENT_INNER_PRODUCER_GROUP,
+            SELF_TEST_PRODUCER_GROUP,
+            SELF_TEST_CONSUMER_GROUP,
+            ONS_HTTP_PROXY_GROUP,
+            CID_ONSAPI_PERMISSION_GROUP,
+            CID_ONSAPI_OWNER_GROUP,
+            CID_ONSAPI_PULL_GROUP,
+            CID_SYS_RMQ_TRANS
     );
 
     public static boolean isWindows() {
@@ -129,8 +136,8 @@ public class MixAll {
 
     public static boolean isUnix() {
         return OS.contains("nix")
-            || OS.contains("nux")
-            || OS.contains("aix");
+                || OS.contains("nux")
+                || OS.contains("aix");
     }
 
     public static boolean isSolaris() {
@@ -266,7 +273,7 @@ public class MixAll {
     }
 
     public static void printObjectProperties(final Logger logger, final Object object,
-        final boolean onlyImportantField) {
+                                             final boolean onlyImportantField) {
         Field[] fields = object.getClass().getDeclaredFields();
         for (Field field : fields) {
             if (!Modifier.isStatic(field.getModifiers())) {
@@ -281,7 +288,7 @@ public class MixAll {
 
                     Object value = null;
                     try {
-                        field.setAccessible(true);
+                        field.setAccessible(true); // private 也能访问 压制Java 访问警报
                         value = field.get(object);
                         if (null == value) {
                             value = "";
@@ -517,17 +524,17 @@ public class MixAll {
 
     public static boolean isSysConsumerGroupPullMessage(String consumerGroup) {
         if (DEFAULT_CONSUMER_GROUP.equals(consumerGroup)
-            || TOOLS_CONSUMER_GROUP.equals(consumerGroup)
-            || SCHEDULE_CONSUMER_GROUP.equals(consumerGroup)
-            || FILTERSRV_CONSUMER_GROUP.equals(consumerGroup)
-            || MONITOR_CONSUMER_GROUP.equals(consumerGroup)
-            || SELF_TEST_CONSUMER_GROUP.equals(consumerGroup)
-            || ONS_HTTP_PROXY_GROUP.equals(consumerGroup)
-            || CID_ONSAPI_PERMISSION_GROUP.equals(consumerGroup)
-            || CID_ONSAPI_OWNER_GROUP.equals(consumerGroup)
-            || CID_ONSAPI_PULL_GROUP.equals(consumerGroup)
-            || CID_SYS_RMQ_TRANS.equals(consumerGroup)
-            || consumerGroup.startsWith(CID_RMQ_SYS_PREFIX)) {
+                || TOOLS_CONSUMER_GROUP.equals(consumerGroup)
+                || SCHEDULE_CONSUMER_GROUP.equals(consumerGroup)
+                || FILTERSRV_CONSUMER_GROUP.equals(consumerGroup)
+                || MONITOR_CONSUMER_GROUP.equals(consumerGroup)
+                || SELF_TEST_CONSUMER_GROUP.equals(consumerGroup)
+                || ONS_HTTP_PROXY_GROUP.equals(consumerGroup)
+                || CID_ONSAPI_PERMISSION_GROUP.equals(consumerGroup)
+                || CID_ONSAPI_OWNER_GROUP.equals(consumerGroup)
+                || CID_ONSAPI_PULL_GROUP.equals(consumerGroup)
+                || CID_SYS_RMQ_TRANS.equals(consumerGroup)
+                || consumerGroup.startsWith(CID_RMQ_SYS_PREFIX)) {
             return true;
         }
         return false;
@@ -535,7 +542,7 @@ public class MixAll {
 
     public static boolean topicAllowsLMQ(String topic) {
         return !topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)
-            && !topic.startsWith(TopicValidator.SYSTEM_TOPIC_PREFIX)
-            && !topic.equals(TopicValidator.RMQ_SYS_SCHEDULE_TOPIC);
+                && !topic.startsWith(TopicValidator.SYSTEM_TOPIC_PREFIX)
+                && !topic.equals(TopicValidator.RMQ_SYS_SCHEDULE_TOPIC);
     }
 }

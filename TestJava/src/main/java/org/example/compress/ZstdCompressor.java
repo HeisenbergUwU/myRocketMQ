@@ -12,7 +12,7 @@ public class ZstdCompressor {
         byte[] result = src;
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream(src.length);
         ZstdOutputStream outputStream = new ZstdOutputStream(byteArrayOutputStream, level);
-        try{
+        try {
             outputStream.write(src);
             outputStream.flush();
             outputStream.close();

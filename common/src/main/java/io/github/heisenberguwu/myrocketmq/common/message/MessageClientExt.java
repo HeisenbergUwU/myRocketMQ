@@ -13,7 +13,16 @@ public class MessageClientExt extends MessageExt {
 
     @Override
     public String getMsgId() {
-        String uniqID = MessageClientID
-        return super.getMsgId();
+        String uniqID = MessageClientIDSetter.getUniqID(this);
+        if (uniqID == null) {
+            return this.getOffsetMsgId();
+        } else {
+            return uniqID;
+        }
+    }
+
+    public void setMsgId(String msgId) {
+        //DO NOTHING
+        //MessageClientIDSetter.setUniqID(this);
     }
 }
