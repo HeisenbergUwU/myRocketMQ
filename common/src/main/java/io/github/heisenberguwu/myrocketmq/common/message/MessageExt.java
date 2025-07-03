@@ -24,6 +24,28 @@ import java.nio.ByteBuffer;
  * 这些都是 Broker 设置的新产生元数据，供消费端使用、监控、消息重试、顺序消费等策略执行 。
  */
 public class MessageExt extends Message {
+    /**
+     * | 字段名称                            |    字节长度 | 说明                          |
+     * | ------------------------------- | ------: | --------------------------- |
+     * | **TOTALSIZE**                   | 4 bytes | 整条消息的总长度（包含此字段）             |
+     * | **MAGICCODE**                   | 4 bytes | 固定魔数，用于校验消息格式合法性            |
+     * | **BODYCRC**                     | 4 bytes | 消息体的 CRC 校验码                |
+     * | **QUEUEID**                     | 4 bytes | 消息所属队列 ID                   |
+     * | **FLAG**                        | 4 bytes | 用户自定义标记                     |
+     * | **QUEUEOFFSET**                 | 8 bytes | 本消息在队列中的偏移量                 |
+     * | **PHYSICALOFFSET**              | 8 bytes | 当前消息在 CommitLog 文件中的物理偏移    |
+     * | **SYSFLAG**                     | 4 bytes | 系统标志位（如是否压缩、事务消息等）          |
+     * | **BORNTIMESTAMP**               | 8 bytes | 生产者端发送时间                    |
+     * | **BORNHOST**                    | 8 bytes | 生产者 IP + 端口                 |
+     * | **STORETIMESTAMP**              | 8 bytes | Broker 存储时间戳                |
+     * | **STOREHOSTADDRESS**            | 8 bytes | Broker IP + 端口              |
+     * | **RECONSUMETIMES**              | 4 bytes | 已重试消费次数                     |
+     * | **Prepared Transaction Offset** | 8 bytes | 事务消息时预处理批次号                 |
+     * | **BODY LENGTH**                 | 4 bytes | 消息体字节长度                     |
+     * | **BODY**                        | N bytes | 消息体字节内容                     |
+     * | **PROPERTIES LENGTH**           | 2 bytes | 属性字段总长度                     |
+     * | **PROPERTIES**                  | M bytes | 键值对属性字符串（`k1=v1;k2=v2;...`） |
+     */
     private static final long serialVersionUID = 5720810158625748049L;
 
     private String brokerName;
