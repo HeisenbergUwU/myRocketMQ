@@ -2,6 +2,12 @@ package org.apache.rocketmq.common;
 
 
 import org.apache.rocketmq.common.annotation.ImportantField;
+import org.apache.rocketmq.common.config.ConfigManagerVersion;
+import org.apache.rocketmq.common.constant.PermName;
+import org.apache.rocketmq.common.message.MessageRequestMode;
+import org.apache.rocketmq.common.metrics.MetricsExporterType;
+import org.apache.rocketmq.common.topic.TopicValidator;
+import org.apache.rocketmq.common.utils.NetworkUtil;
 
 import java.util.concurrent.TimeUnit;
 
