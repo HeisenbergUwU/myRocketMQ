@@ -1,2 +1,0 @@
-org.apache.rocketmq.common.example.spi.impl.EnglishGreetingService
-org.apache.rocketmq.common.example.spi.impl.ChineseGreetingService

@@ -1,0 +1,2 @@
+org.example.spi.provider.PNGImageProcessorProvider
+org.example.spi.provider.JPGImageProcessorProvider

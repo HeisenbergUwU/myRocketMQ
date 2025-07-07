@@ -24,7 +24,7 @@ public class FutureUtils {
          * | 如果换成 `whenComplete`？      | 回调会同步执行在完成线程中，**有阻塞风险、性能隐患**       |
          * | 推荐使用场景                    | 回调耗时、需要线程隔离、业务逻辑复杂、有稳定性要求时建议使用异步   |
          */
-        future.whenComplete()
+
         future.whenCompleteAsync((t, throwable) -> {
             if (throwable != null) {
                 nextFuture.completeExceptionally(throwable); // 主动抛出异常。
@@ -33,5 +33,17 @@ public class FutureUtils {
             }
         }, executor);
         return nextFuture;
+    }
+
+    public static <T> CompletableFuture<T> addExecutor(CompletableFuture<T> future,ExecutorService executor)
+    {
+        // 包装的上面的方法，返回的还是我们在这个方法中new 的CompletableFuture
+        return appendNextFuture(future,new CompletableFuture<>(),executor);
+    }
+
+    public static <T> CompletableFuture<T> completeExceptionally(Throwable t) {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        future.completeExceptionally(t);
+        return future;
     }
 }
