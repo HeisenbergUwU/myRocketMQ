@@ -3,11 +3,11 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>io.github.heisenberguwu.myrocketmq</groupId>
-    <artifactId>myMQ</artifactId>
-    <version>0.0.1</version>
+    <groupId>org.apache.rocketmq</groupId>
+    <artifactId>rocketmq-all</artifactId>
+    <version>5.3.3</version>
     <packaging>pom</packaging>
-    <name>myMQ</name>
+    <name>Apache RocketMQ ${project.version}</name>
     <modules>
         <module>common</module>
     </modules>

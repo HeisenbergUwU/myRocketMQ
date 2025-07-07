@@ -1,1 +1,1 @@
-io.github.heisenberguwu.myrocketmq.common.logging.DefaultJoranConfiguratorExt
+org.apache.rocketmq.common.logging.DefaultJoranConfiguratorExt

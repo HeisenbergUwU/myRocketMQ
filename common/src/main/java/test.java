@@ -1,4 +1,4 @@
-import io.github.heisenberguwu.myrocketmq.common.config.ConfigRocksDBStorage;
+import org.apache.rocketmq.common.config.ConfigRocksDBStorage;
 
 public class test {
     public static void main(String[] args) throws Exception {
