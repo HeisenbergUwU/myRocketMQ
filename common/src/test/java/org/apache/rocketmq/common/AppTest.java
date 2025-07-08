@@ -10,8 +10,7 @@ import java.util.Map;
 /**
  * Unit test for simple App.
  */
-public class AppTest
-        extends TestCase {
+public class AppTest {
 
     /**
      * Rigourous Test :-)
