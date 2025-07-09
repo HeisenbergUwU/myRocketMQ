@@ -1,11 +1,10 @@
-package org.example;
+package org.example.netty;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 
 public class testByteBuf {
     public static void main(String[] args) {
@@ -33,7 +32,7 @@ public class testByteBuf {
          * 	at io.netty.buffer.AbstractByteBuf.checkReadableBytes0(AbstractByteBuf.java:1442)
          * 	at io.netty.buffer.AbstractByteBuf.checkReadableBytes(AbstractByteBuf.java:1428)
          * 	at io.netty.buffer.AbstractByteBuf.readBytes(AbstractByteBuf.java:866)
-         * 	at org.example.testByteBuf.main(testByteBuf.java:31)
+         * 	at org.example.netty.testByteBuf.main(testByteBuf.java:31)
          */
         System.out.println(byteBuf.readBytes(13));
         System.out.println(byteBuf.readerIndex());
