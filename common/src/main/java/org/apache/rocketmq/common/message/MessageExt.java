@@ -29,7 +29,7 @@ public class MessageExt extends Message {
      * | ------------------------------- | ------: | --------------------------- |
      * | **TOTALSIZE**                   | 4 bytes | 整条消息的总长度（包含此字段）             |
      * | **MAGICCODE**                   | 4 bytes | 固定魔数，用于校验消息格式合法性            |
-     * | **BODYCRC**                     | 4 bytes | 消息体的 CRC 校验码                |
+     * | **BODYCRC**                     | 4 bytes | 消息体的 raft 校验码                |
      * | **QUEUEID**                     | 4 bytes | 消息所属队列 ID                   |
      * | **FLAG**                        | 4 bytes | 用户自定义标记                     |
      * | **QUEUEOFFSET**                 | 8 bytes | 本消息在队列中的偏移量                 |

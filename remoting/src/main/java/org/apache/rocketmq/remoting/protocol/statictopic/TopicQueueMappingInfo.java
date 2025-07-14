@@ -18,20 +18,21 @@ package org.apache.rocketmq.remoting.protocol.statictopic;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
 public class TopicQueueMappingInfo extends RemotingSerializable {
     public static final int LEVEL_0 = 0;
 
-    String topic; // redundant field
-    String scope = MixAll.METADATA_SCOPE_GLOBAL;
-    int totalQueues;
-    String bname;  //identify the hosted broker name
-    long epoch; //important to fence the old dirty data
-    boolean dirty; //indicate if the data is dirty
+    String topic; // Topic 名称
+    String scope = MixAll.METADATA_SCOPE_GLOBAL; // 范围 全局
+    int totalQueues; // Topic 在 Broker 上面的总队列数
+    String bname;  // Broker 名称，用于标识符当前的Topic 所在的 Broker
+    long epoch; // 用于标记数据的版本，防止使用时候过时
+    boolean dirty; // 标记是否被修改是否过期？
     //register to broker to construct the route
-    protected ConcurrentMap<Integer/*logicId*/, Integer/*physicalId*/> currIdMap = new ConcurrentHashMap<>();
+    protected ConcurrentMap<Integer/*logicId*/, Integer/*physicalId*/> currIdMap = new ConcurrentHashMap<>(); // 逻辑队列 ID 到物理队列 ID 的映射
 
     public TopicQueueMappingInfo() {
 

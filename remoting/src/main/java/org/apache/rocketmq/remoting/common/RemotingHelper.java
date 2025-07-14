@@ -330,8 +330,10 @@ public class RemotingHelper {
     public static void closeChannel(Channel channel) {
         final String addrRemote = RemotingHelper.parseChannelRemoteAddr(channel);
         if ("".equals(addrRemote)) {
+            // 空地址 → 本地/不重要→ 立即同步关闭，无需回调。
             channel.close();
         } else {
+            // 非空地址 → 远程连接→ 异步关闭 + 日志反馈。
             channel.close().addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {

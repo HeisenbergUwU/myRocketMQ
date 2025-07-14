@@ -31,12 +31,14 @@ import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 import org.apache.rocketmq.remoting.protocol.statictopic.TopicQueueMappingInfo;
 
 public class TopicRouteData extends RemotingSerializable {
-    private String orderTopicConf;
-    private List<QueueData> queueDatas;
-    private List<BrokerData> brokerDatas;
-    private HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
+    private String orderTopicConf; // 是否有序的Topic序列
+    private List<QueueData> queueDatas; // MQ的读写并行数量与各种配置项，属于那个broker ， 一个topic可以对应着多个 MQ，并且分配到多个broker上。
+    private List<BrokerData> brokerDatas; // Broker 信息，一个Topic 属于多个 Brokers
+    // 在 RocketMQ 中，FilterServer 是一个用于支持消息过滤的组件。它允许消费者上传自定义的 Java 类（通常是实现了消息过滤逻辑的类），并在该服务器上执行过滤操作，从而减少了 Broker 的负担。
+    // 例如我直关心 tag=b 的消息。
+    private HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable; // 	该 Broker 机器上运行的 FilterServer 地址列表
     //It could be null or empty
-    private Map<String/*brokerName*/, TopicQueueMappingInfo> topicQueueMappingByBroker;
+    private Map<String/*brokerName*/, TopicQueueMappingInfo> topicQueueMappingByBroker;  // Topic 与 MQ 对应 BrokerName 的映射关系。
 
     public TopicRouteData() {
         queueDatas = new ArrayList<>();

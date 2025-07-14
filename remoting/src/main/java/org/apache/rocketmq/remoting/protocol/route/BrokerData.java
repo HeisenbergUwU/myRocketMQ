@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.MixAll;
 
@@ -29,15 +30,22 @@ import org.apache.rocketmq.common.MixAll;
  * that it belongs to, and all the single instance information for this cluster.
  */
 public class BrokerData implements Comparable<BrokerData> {
-    private String cluster;
-    private String brokerName;
+    private String cluster; // 集群名称
+    private String brokerName; // broker 逻辑名称
 
     /**
      * The container that store the all single instances for the current broker replication cluster.
      * The key is the brokerId, and the value is the address of the single broker instance.
      */
-    private HashMap<Long, String> brokerAddrs;
-    private String zoneName;
+    /*
+    brokerAddrs = {
+          0L: "192.168.1.2:10911",   // 主节点
+          1L: "192.168.1.3:10912",   // 从节点1
+          2L: "192.168.1.4:10912",   // 从节点2
+        }
+     */
+    private HashMap<Long, String> brokerAddrs;  // key: brokerId，value: 地址(ip:port)
+    private String zoneName; // 代表可用区 region信息
     private final Random random = new Random();
 
     /**
@@ -66,7 +74,7 @@ public class BrokerData implements Comparable<BrokerData> {
     }
 
     public BrokerData(String cluster, String brokerName, HashMap<Long, String> brokerAddrs,
-        boolean enableActingMaster) {
+                      boolean enableActingMaster) {
         this.cluster = cluster;
         this.brokerName = brokerName;
         this.brokerAddrs = brokerAddrs;
@@ -74,7 +82,7 @@ public class BrokerData implements Comparable<BrokerData> {
     }
 
     public BrokerData(String cluster, String brokerName, HashMap<Long, String> brokerAddrs, boolean enableActingMaster,
-        String zoneName) {
+                      String zoneName) {
         this.cluster = cluster;
         this.brokerName = brokerName;
         this.brokerAddrs = brokerAddrs;

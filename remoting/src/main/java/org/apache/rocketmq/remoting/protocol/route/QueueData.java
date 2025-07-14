@@ -21,6 +21,11 @@
 package org.apache.rocketmq.remoting.protocol.route;
 
 public class QueueData implements Comparable<QueueData> {
+    /**
+     * brokerClusterName=rocketmq-cluster
+     * brokerName=broker-a
+     * - 这里的brokerName 是逻辑名称
+     */
     private String brokerName;
     private int readQueueNums;
     private int writeQueueNums;

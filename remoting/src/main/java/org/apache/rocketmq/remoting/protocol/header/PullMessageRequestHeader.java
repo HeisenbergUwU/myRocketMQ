@@ -34,29 +34,32 @@ import org.apache.rocketmq.remoting.protocol.FastCodesHeader;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
 import org.apache.rocketmq.remoting.rpc.TopicQueueRequestHeader;
 
+/**
+ * Broker 或 Proxy 接受客户端拉取消息请求时候的请求头数据结构
+ */
 @RocketMQAction(value = RequestCode.PULL_MESSAGE, action = Action.SUB)
 public class PullMessageRequestHeader extends TopicQueueRequestHeader implements FastCodesHeader {
 
     @CFNotNull
     @RocketMQResource(ResourceType.GROUP)
-    private String consumerGroup;
+    private String consumerGroup; // 消费者所属的组
     @CFNotNull
     @RocketMQResource(ResourceType.TOPIC)
-    private String topic;
+    private String topic; // 主题名称
     @CFNotNull
-    private Integer queueId;
+    private Integer queueId; // 指定从那个队列拉取消息
     @CFNotNull
-    private Long queueOffset;
+    private Long queueOffset; // 拉取起始的偏移量，用于定位具体的消息
     @CFNotNull
-    private Integer maxMsgNums;
+    private Integer maxMsgNums; // 一次最大的拉取消息数量
     @CFNotNull
-    private Integer sysFlag;
+    private Integer sysFlag; // 系统控制标志位，是否有过滤，是否有重试消费。
     @CFNotNull
-    private Long commitOffset;
+    private Long commitOffset; // 消费者已经提交的偏移量，用于Broker跟踪进度。
     @CFNotNull
-    private Long suspendTimeoutMillis;
+    private Long suspendTimeoutMillis; // Broker 长轮训的超时时间，控制拉取请求悬挂多久。
     @CFNullable
-    private String subscription;
+    private String subscription; // 订阅表达式， tag 或 class-filter 模式
     @CFNotNull
     private Long subVersion;
     private String expressionType;
