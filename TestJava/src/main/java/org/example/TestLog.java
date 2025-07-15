@@ -9,5 +9,13 @@ public class TestLog {
 
     public static void main(String[] args) {
         log.error(("HELLO WORLD."));
+
+        Integer i = new Integer(128);
+        Integer j = new Integer(128);
+        System.out.println(i == j);
+
+        Integer a = new Integer(1);
+        Integer b = new Integer(1);
+        System.out.println(a == b);
     }
 }
