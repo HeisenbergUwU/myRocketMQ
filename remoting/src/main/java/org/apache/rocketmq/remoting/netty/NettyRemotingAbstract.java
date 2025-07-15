@@ -80,10 +80,107 @@ public abstract class NettyRemotingAbstract {
 
     protected final HashMap<Integer/*request code*/, Pair<NettyRequestProcessor, ExecutorService>> processorTable = new HashMap<>(64);
 
-    protected final NettyEventExecutor
+    protected final NettyEventExecutor nettyEventExecutor = new NettyEventExecutor();
+
+    /**
+     * 自定义 channel event listener
+     *
+     * @return
+     */
+    public abstract ChannelEventListener getChannelEventListener();
 
 
-    class NettyEventExecutor extends ServiceThread{
+    /**
+     *
+     */
+    class NettyEventExecutor extends ServiceThread {
 
+        private final LinkedBlockingQueue<NettyEvent> eventQueue = new LinkedBlockingQueue<>();
+
+        public void putNettyEvent(final NettyEvent event) {
+            int currentSize = this.eventQueue.size();
+            int maxSize = 10000;
+            if (currentSize <= maxSize) {
+                this.eventQueue.add(event);
+            } else {
+                log.warn("event queue size [{}] over the limit [{}], so drop this event {}", currentSize, maxSize, event.toString());
+            }
+        }
+
+        @Override
+        public String getServiceName() {
+            return NettyEventExecutor.class.getSimpleName();
+        }
+
+        @Override
+        public void run() {
+            log.info(this.getServiceName() + " service started");
+
+            final ChannelEventListener listener = NettyRemotingAbstract.this.getChannelEventListener();
+            while (!this.isStopped()) {
+                try {
+                    // eventQueue 是一个 LinkedBlockingQueue , 这里使用 poll 是为了防止一直 阻塞 或者 忙轮训。
+                    /**
+                     * poll()：非阻塞，立即返回队列头或者 null（若为空）
+                     *
+                     * poll(long timeout, TimeUnit unit)：最多等待指定时间，若在这段时间内有元素入队，会立即取走并返回；若仍无元素，则返回 null。该方法也可能因线程中断抛出 InterruptedException
+                     *
+                     * take()：无限期阻塞等待，直到有可取元素。
+                     *
+                     *
+                     *     public E poll(long timeout, TimeUnit unit) throws InterruptedException {
+                     *         E x = null;
+                     *         int c = -1;
+                     *         long nanos = unit.toNanos(timeout);
+                     *         final AtomicInteger count = this.count;
+                     *         final ReentrantLock takeLock = this.takeLock;
+                     *         takeLock.lockInterruptibly();
+                     *         try {
+                     *             while (count.get() == 0) {
+                     *                 if (nanos <= 0)
+                     *                     return null;
+                     *                 nanos = notEmpty.awaitNanos(nanos);
+                     *             }
+                     *             x = dequeue();
+                     *             c = count.getAndDecrement();
+                     *             if (c > 1)
+                     *                 notEmpty.signal();
+                     *         } finally {
+                     *             takeLock.unlock();
+                     *         }
+                     *         if (c == capacity)
+                     *             signalNotFull();
+                     *         return x;
+                     *     }
+                     */
+                    NettyEvent event = this.eventQueue.poll(3000, TimeUnit.MILLISECONDS);
+                    if (event != null && listener != null) {
+                        // listener 负责将事件上传给对应的业务。
+                        switch (event.getType()) {
+                            case IDLE:
+                                listener.onChannelIdle(event.getRemoteAddr(), event.getChannel());
+                                break;
+                            case CLOSE:
+                                listener.onChannelClose(event.getRemoteAddr(), event.getChannel());
+                                break;
+                            case CONNECT:
+                                listener.onChannelConnect(event.getRemoteAddr(), event.getChannel());
+                                break;
+                            case EXCEPTION:
+                                listener.onChannelException(event.getRemoteAddr(), event.getChannel());
+                                break;
+                            case ACTIVE:
+                                listener.onChannelActive(event.getRemoteAddr(), event.getChannel());
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn(this.getServiceName() + " service has exception. ", e);
+                }
+            }
+            log.info(this.getServiceName() + " service end");
+        }
     }
 }

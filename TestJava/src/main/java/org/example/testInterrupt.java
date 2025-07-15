@@ -3,22 +3,24 @@ package org.example;
 import static java.lang.Thread.sleep;
 
 public class testInterrupt {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         Runnable task = new Runnable() {
             @Override
             public void run() {
-//                try {
-//                    sleep(100000);
-//                } catch (InterruptedException e) {
-//                    System.out.println(e);
-//                }
-                while (true) {
-                    System.out.println(Thread.currentThread().isInterrupted());
+                while (!Thread.currentThread().isInterrupted()) {
+                    System.out.println("===");
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        System.out.println("Interrupting!");
+                        Thread.currentThread().interrupt(); // 重新设定 interrupt 位
+                    }
                 }
             }
         };
         Thread thread = new Thread(task);
         thread.start();
+        Thread.sleep(500);
         thread.interrupt();
     }
 }
