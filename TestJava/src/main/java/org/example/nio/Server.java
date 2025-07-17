@@ -51,8 +51,6 @@ public class Server {
                     workers.submit(new WorkerHandler(client));
                 }
             }
-
-
         }
         ssc.close();
     }
@@ -91,6 +89,4 @@ public class Server {
             }
         }
     }
-
-
 }

@@ -224,6 +224,7 @@ public class RemotingCommand {
 
     /**
      * 这里进行解码，应该使用 unpooled ByteBuf 适合临时解码操作，不需要release 也不会自动托管到 direct Mem
+     *
      * @param byteBuffer
      * @return
      * @throws RemotingCommandException
@@ -232,10 +233,11 @@ public class RemotingCommand {
         int length = byteBuffer.readableBytes();
         int oriHeaderLen = byteBuffer.readInt();
         int headerLength = getHeaderLength(oriHeaderLen);
+        // 报文头长度大于ByteBuf的总长度
         if (headerLength > length - 4) {
             throw new RemotingCommandException("decode error, bad header length: " + headerLength);
         }
-
+        // 序列化-报文头部
         RemotingCommand cmd = headerDecode(byteBuffer, headerLength, getProtocolType(oriHeaderLen));
 
         int bodyLength = length - 4 - headerLength;

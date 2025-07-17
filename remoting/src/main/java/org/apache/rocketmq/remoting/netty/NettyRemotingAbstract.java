@@ -78,6 +78,7 @@ public abstract class NettyRemotingAbstract {
     // 存放所有“正在进行中”的请求，通过opaque进行识别。这些对象是一次性的。
     protected final ConcurrentMap<Integer/* opaque */, ResponseFuture> responseTable = new ConcurrentHashMap<>(256);
 
+    // 请求码 - 处理器 + 线程池 ， 使用Pair 对象实现三元组。
     protected final HashMap<Integer/*request code*/, Pair<NettyRequestProcessor, ExecutorService>> processorTable = new HashMap<>(64);
 
     protected final NettyEventExecutor nettyEventExecutor = new NettyEventExecutor();
@@ -89,6 +90,38 @@ public abstract class NettyRemotingAbstract {
      */
     public abstract ChannelEventListener getChannelEventListener();
 
+    /**
+     * 一次请求RPC
+     *
+     * @param channel
+     * @param request
+     * @param timeoutMillis
+     * @throws InterruptedException
+     * @throws RemotingTooMuchRequestException
+     * @throws RemotingTimeoutException
+     * @throws RemotingSendRequestException
+     */
+    public void invokeOnewayImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis)
+            throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
+        request.markOnewayRPC();
+        boolean acquired = this.semaphoreOneway.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
+        if (acquired) {
+            final SemaphoreReleaseOnlyOnce once = new SemaphoreReleaseOnlyOnce(this.semaphoreOneway);
+            try {
+                //
+                channel.writeAndFlush(request).addListener((ChannelFutureListener) f -> {
+                    once.release();
+                    if (!f.isSuccess()) {
+                        log.warn("send a request command to channel <" + channel.remoteAddress() + "> failed.");
+                    }
+                });
+            }
+        }
+    }
+
+    public HashMap<Integer, Pair<NettyRequestProcessor, ExecutorService>> getProcessorTable() {
+        return processorTable;
+    }
 
     /**
      *
