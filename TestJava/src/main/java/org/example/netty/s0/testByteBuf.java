@@ -1,4 +1,4 @@
-package org.example.netty;
+package org.example.netty.s0;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -32,7 +32,7 @@ public class testByteBuf {
          * 	at io.netty.buffer.AbstractByteBuf.checkReadableBytes0(AbstractByteBuf.java:1442)
          * 	at io.netty.buffer.AbstractByteBuf.checkReadableBytes(AbstractByteBuf.java:1428)
          * 	at io.netty.buffer.AbstractByteBuf.readBytes(AbstractByteBuf.java:866)
-         * 	at org.example.netty.testByteBuf.main(testByteBuf.java:31)
+         * 	at org.example.netty.s0.testByteBuf.main(testByteBuf.java:31)
          */
         System.out.println(byteBuf.readBytes(13));
         System.out.println(byteBuf.readerIndex());

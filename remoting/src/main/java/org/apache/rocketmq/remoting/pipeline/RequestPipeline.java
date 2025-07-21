@@ -5,7 +5,6 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 /**
  * 整体作用就是将一个执行上下文方法，还可以通过pipe函数合并2个RequestPipeline
- * 整体作用就是将一个执行上下文方法，还可以通过pipe函数合并2个RequestPipeline
  */
 public interface RequestPipeline {
 

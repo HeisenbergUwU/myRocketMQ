@@ -80,8 +80,25 @@ public abstract class NettyRemotingAbstract {
 
     // 请求码 - 处理器 + 线程池 ， 使用Pair 对象实现三元组。
     protected final HashMap<Integer/*request code*/, Pair<NettyRequestProcessor, ExecutorService>> processorTable = new HashMap<>(64);
-
+    // Netty 事件执行线程。
     protected final NettyEventExecutor nettyEventExecutor = new NettyEventExecutor();
+
+    /**
+     * {@link #processorTable} 中没有明确定义的 code的 请求，就使用默认请求处理器来处理。
+     */
+    protected Pair<NettyRequestProcessor, ExecutorService> defaultRequestProcessorPair;
+
+    /**
+     * SSL 上下文，用来创建SslHandler
+     */
+    protected volatile SslContext sslContext;
+
+    /**
+     * 自定义 RPC 回调
+     */
+    protected List<RPCHook> rpcHooks = new ArrayList<>();
+
+    protected RequestPipeline requestPipeline;
 
     /**
      * 自定义 channel event listener
@@ -108,13 +125,14 @@ public abstract class NettyRemotingAbstract {
         if (acquired) {
             final SemaphoreReleaseOnlyOnce once = new SemaphoreReleaseOnlyOnce(this.semaphoreOneway);
             try {
-                //
                 channel.writeAndFlush(request).addListener((ChannelFutureListener) f -> {
                     once.release();
                     if (!f.isSuccess()) {
                         log.warn("send a request command to channel <" + channel.remoteAddress() + "> failed.");
                     }
                 });
+            } catch (Exception e) {
+
             }
         }
     }

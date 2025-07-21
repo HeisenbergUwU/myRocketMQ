@@ -1,4 +1,4 @@
-package org.example.netty;
+package org.example.netty.s0;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -10,7 +10,7 @@ import io.netty.handler.codec.http.*;
 public class HttpServer {
 
     public static void main(String[] args) {
-        NioEventLoopGroup bossGroup = new NioEventLoopGroup();
+        NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup();
 
         try {
