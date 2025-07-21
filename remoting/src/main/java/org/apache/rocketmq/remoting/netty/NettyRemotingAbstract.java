@@ -97,8 +97,24 @@ public abstract class NettyRemotingAbstract {
      * 自定义 RPC 回调
      */
     protected List<RPCHook> rpcHooks = new ArrayList<>();
-
+    // 请求流水线，自定义的可以pipe() 操作，链执行
     protected RequestPipeline requestPipeline;
+    // 是否关闭
+    protected AtomicBoolean isShuttingDown = new AtomicBoolean(false);
+
+    static {
+        NettyLogger.initNettyLogger();
+    }
+
+    /**
+     * 构造方法，主要用来创建一次执行&异步执行的锁
+     * @param permitsOneway
+     * @param permitsAsync
+     */
+    public NettyRemotingAbstract(final int permitsOneway, final int permitsAsync) {
+        this.semaphoreOneway = new Semaphore(permitsOneway, true);
+        this.semaphoreAsync = new Semaphore(permitsAsync, true);
+    }
 
     /**
      * 自定义 channel event listener
