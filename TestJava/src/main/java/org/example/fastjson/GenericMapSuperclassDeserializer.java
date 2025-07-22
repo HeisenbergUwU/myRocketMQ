@@ -15,7 +15,7 @@ public class GenericMapSuperclassDeserializer implements ObjectDeserializer {
 
     /**
      * 反序列化方法
-     *
+
      * @param parser    JSON 解析器
      * @param type      目标类型 （比如 HashMap<String, Integer>）；
      * @param fieldName 是字段名（可选，用于定位 JSON 中的某个字段）；

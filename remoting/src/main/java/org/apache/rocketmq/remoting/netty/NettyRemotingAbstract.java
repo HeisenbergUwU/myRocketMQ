@@ -131,8 +131,22 @@ public abstract class NettyRemotingAbstract {
 
     public void processMessageReceived(ChannelHandlerContext ctx,RemotingCommand msg)
     {
-
+        if(msg!=null)
+        {
+            switch (msg.getType())
+            {
+                case REQUEST_COMMAND:
+                    // TODO: processRequestCommand
+            }
+        }
     }
+
+    public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd)
+    {
+        // 这个表是 code : Pair
+        final Pair<NettyRequestProcessor,ExecutorService> matched = this.processorTable.get(cmd.getCode());
+    }
+
 
     /**
      * 一次请求RPC
