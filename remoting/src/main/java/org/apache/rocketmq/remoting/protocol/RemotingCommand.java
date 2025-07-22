@@ -153,6 +153,11 @@ public class RemotingCommand {
         return cmd;
     }
 
+    /**
+     * 设定RPC指令版本号
+     *
+     * @param cmd
+     */
     protected static void setCmdVersion(RemotingCommand cmd) {
         if (configVersion >= 0) {
             cmd.setVersion(configVersion);
@@ -230,38 +235,53 @@ public class RemotingCommand {
      * @throws RemotingCommandException
      */
     public static RemotingCommand decode(final ByteBuf byteBuffer) throws RemotingCommandException {
+        // --- 这里进来的数据已经是 Netty 解码好的了
+
+        // 1. 读取一下字节总长度
         int length = byteBuffer.readableBytes();
+        // 2. 第一个 Int 是Header长度
         int oriHeaderLen = byteBuffer.readInt();
+        // 3. 截取 Header 数据 -- 最长 16777215，负数处理
         int headerLength = getHeaderLength(oriHeaderLen);
-        // 报文头长度大于ByteBuf的总长度
+        // 报文头长度大于ByteBuf的总长度 ， 这明显是有问题的。
         if (headerLength > length - 4) {
             throw new RemotingCommandException("decode error, bad header length: " + headerLength);
         }
         // 序列化-报文头部
         RemotingCommand cmd = headerDecode(byteBuffer, headerLength, getProtocolType(oriHeaderLen));
-
+        // 报文长度
         int bodyLength = length - 4 - headerLength;
         byte[] bodyData = null;
+        // 如果有报文体长度的话就进行读取
         if (bodyLength > 0) {
             bodyData = new byte[bodyLength];
             byteBuffer.readBytes(bodyData);
         }
         cmd.body = bodyData;
-
+        // 这么说来还有不带有 cmdBody 的报文。
         return cmd;
     }
 
     public static int getHeaderLength(int length) {
+        /**
+         * | length（十进制） | 二进制（32 位）         | & `0xFFFFFF` 后二进制                 | 结果（十进制）  |
+         * | ----------- | ----------------- | --------------------------------- | -------- |
+         * | -1          | `1111…11111111`   | `0000 11111111 11111111 11111111` | 16777215 |
+         * | -2          | `1111…11111110`   | `0000 11111111 11111111 11111110` | 16777214 |
+         * | 5           | `0000…00000101`   | 相同                                | 5        |
+         * | 0x01000000  | `0000 0001 …0000` | `0000 0000 …0000`                 | 0        |
+         */
         return length & 0xFFFFFF;
     }
 
     private static RemotingCommand headerDecode(ByteBuf byteBuffer, int len,
                                                 SerializeType type) throws RemotingCommandException {
+        // 解析RPC头
         switch (type) {
-            case JSON:
+            case JSON: // JSON 头
                 byte[] headerData = new byte[len];
-                byteBuffer.readBytes(headerData);
-                RemotingCommand resultJson = RemotingSerializable.decode(headerData, RemotingCommand.class);
+                byteBuffer.readBytes(headerData); // 读取 len 个。
+                RemotingCommand resultJson = RemotingSerializable.decode(headerData, RemotingCommand.class); // JSON.parseObject(data, classOfT); fastjson
                 resultJson.setSerializeTypeCurrentRPC(type);
                 return resultJson;
             case ROCKETMQ:
@@ -271,7 +291,6 @@ public class RemotingCommand {
             default:
                 break;
         }
-
         return null;
     }
 

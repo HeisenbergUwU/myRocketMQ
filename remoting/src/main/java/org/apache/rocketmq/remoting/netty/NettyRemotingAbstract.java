@@ -51,6 +51,7 @@ import org.apache.rocketmq.remoting.pipeline.RequestPipeline;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RemotingSysResponseCode;
 import org.apache.rocketmq.remoting.protocol.ResponseCode;
+import sun.nio.ch.Net;
 
 import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.LABEL_IS_LONG_POLLING;
 import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.LABEL_REQUEST_CODE;
@@ -122,6 +123,16 @@ public abstract class NettyRemotingAbstract {
      * @return
      */
     public abstract ChannelEventListener getChannelEventListener();
+
+    public void putNettyEvent(final NettyEvent event)
+    {
+        this.nettyEventExecutor.putNettyEvent(event); // 检测 LinkedList长度
+    }
+
+    public void processMessageReceived(ChannelHandlerContext ctx,RemotingCommand msg)
+    {
+
+    }
 
     /**
      * 一次请求RPC

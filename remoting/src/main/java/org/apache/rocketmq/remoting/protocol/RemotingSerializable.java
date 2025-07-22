@@ -18,6 +18,7 @@ package org.apache.rocketmq.remoting.protocol;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.serializer.SerializerFeature;
+
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -43,6 +44,13 @@ public abstract class RemotingSerializable {
         }
         return fromJson(data, classOfT);
     }
+// 这是不合法的。
+//    public static <?> ? decode(final byte[] data, Class<?> classOfT) {
+//        if (data == null) {
+//            return null;
+//        }
+//        return fromJson(data, classOfT);
+//    }
 
     public static <T> List<T> decodeList(final byte[] data, Class<T> classOfT) {
         if (data == null) {
@@ -74,7 +82,7 @@ public abstract class RemotingSerializable {
      * @param features Features to apply
      * @return serialized data.
      */
-    public byte[] encode(SerializerFeature...features) {
+    public byte[] encode(SerializerFeature... features) {
         final String json = JSON.toJSONString(this, features);
         return json.getBytes(CHARSET_UTF8);
     }
