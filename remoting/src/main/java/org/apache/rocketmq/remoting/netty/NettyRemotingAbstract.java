@@ -109,6 +109,7 @@ public abstract class NettyRemotingAbstract {
 
     /**
      * 构造方法，主要用来创建一次执行&异步执行的锁
+     *
      * @param permitsOneway
      * @param permitsAsync
      */
@@ -124,27 +125,55 @@ public abstract class NettyRemotingAbstract {
      */
     public abstract ChannelEventListener getChannelEventListener();
 
-    public void putNettyEvent(final NettyEvent event)
-    {
+    public void putNettyEvent(final NettyEvent event) {
         this.nettyEventExecutor.putNettyEvent(event); // 检测 LinkedList长度
     }
 
-    public void processMessageReceived(ChannelHandlerContext ctx,RemotingCommand msg)
-    {
-        if(msg!=null)
-        {
-            switch (msg.getType())
-            {
+    public void processMessageReceived(ChannelHandlerContext ctx, RemotingCommand msg) {
+        if (msg != null) {
+            switch (msg.getType()) {
                 case REQUEST_COMMAND:
                     // TODO: processRequestCommand
+                    processRequestCommand(ctx, msg);
+                    break;
             }
         }
     }
 
-    public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd)
-    {
+    public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd) {
         // 这个表是 code : Pair
-        final Pair<NettyRequestProcessor,ExecutorService> matched = this.processorTable.get(cmd.getCode());
+        final Pair<NettyRequestProcessor, ExecutorService> matched = this.processorTable.get(cmd.getCode()); // 查看请求处理代码有没有特定处理器？
+        final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessorPair : matched; // 如果有处理器那么 pair = matched，如果没有那就是用default
+        final int opaque = cmd.getOpaque(); // opaque ： 不透明的，不透光的；难懂的，隐晦的；迟钝的
+        // 如果没有配置处理器那就是有问题了，直接返回吧
+        if (pair == null) {
+            String error = " request type " + cmd.getCode() + " not supported";
+            final RemotingCommand response =
+                    RemotingCommand.createResponseCommand(RemotingSysResponseCode.REQUEST_CODE_NOT_SUPPORTED, error);
+            response.setOpaque(opaque);
+            writeResponse(ctx.channel(), cmd, response);
+            log.error(RemotingHelper.parseChannelRemoteAddr(ctx.channel()) + error);
+            return;
+        }
+
+        Runnable run = buildProcessRequestHandler(ctx, cmd, pair, opaque);
+        // 如果在关闭过程中
+        if (isShuttingDown.get()) {
+            if (cmd.getVersion() > MQVersion.Version.V5_3_1.ordinal()) { // 大于这个版本号的 cmd，就拒绝了。
+                final RemotingCommand response = RemotingCommand.createResponseCommand(ResponseCode.GO_AWAY,
+                        "please go away");
+                response.setOpaque(opaque);
+                writeResponse(ctx.channel(), cmd, response);
+                log.info("proxy is shutting down, write response GO_AWAY. channel={}, requestCode={}, opaque={}", ctx.channel(), cmd.getCode(), opaque);
+                return;
+            }
+        }
+
+        // 如果拒绝
+        if (pair.getObject1().rejectRequest()) {
+            RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_BUSY, "[REJECTREQUEST]system busy, start flow control for a while");
+        }
+
     }
 
 
@@ -180,6 +209,10 @@ public abstract class NettyRemotingAbstract {
 
     public HashMap<Integer, Pair<NettyRequestProcessor, ExecutorService>> getProcessorTable() {
         return processorTable;
+    }
+
+    public static void writeResponse(Channel channel, RemotingCommand request, @Nullable RemotingCommand response) {
+        writeResponse(channel, request, response, null);
     }
 
     /**
