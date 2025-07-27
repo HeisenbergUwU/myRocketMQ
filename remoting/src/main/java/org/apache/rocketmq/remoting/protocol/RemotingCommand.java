@@ -118,7 +118,10 @@ public class RemotingCommand {
     // 那种语言
     private LanguageCode language = LanguageCode.JAVA;
     private int version = 0;
-    private int opaque = requestId.getAndIncrement(); // 原子操作
+    /**
+     * 幂等性、请求追踪 可以使用这个变量
+     */
+    private int opaque = requestId.getAndIncrement(); // 不透明变量，对于调用者是隐藏的。
     private int flag = 0;
     private String remark;
     private HashMap<String, String> extFields;

@@ -148,8 +148,7 @@ public abstract class NettyRemotingAbstract {
         // 如果没有配置处理器那就是有问题了，直接返回吧
         if (pair == null) {
             String error = " request type " + cmd.getCode() + " not supported";
-            final RemotingCommand response =
-                    RemotingCommand.createResponseCommand(RemotingSysResponseCode.REQUEST_CODE_NOT_SUPPORTED, error);
+            final RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.REQUEST_CODE_NOT_SUPPORTED, error);
             response.setOpaque(opaque);
             writeResponse(ctx.channel(), cmd, response);
             log.error(RemotingHelper.parseChannelRemoteAddr(ctx.channel()) + error);
@@ -160,8 +159,7 @@ public abstract class NettyRemotingAbstract {
         // 如果在关闭过程中
         if (isShuttingDown.get()) {
             if (cmd.getVersion() > MQVersion.Version.V5_3_1.ordinal()) { // 大于这个版本号的 cmd，就拒绝了。
-                final RemotingCommand response = RemotingCommand.createResponseCommand(ResponseCode.GO_AWAY,
-                        "please go away");
+                final RemotingCommand response = RemotingCommand.createResponseCommand(ResponseCode.GO_AWAY, "please go away");
                 response.setOpaque(opaque);
                 writeResponse(ctx.channel(), cmd, response);
                 log.info("proxy is shutting down, write response GO_AWAY. channel={}, requestCode={}, opaque={}", ctx.channel(), cmd.getCode(), opaque);
@@ -169,9 +167,11 @@ public abstract class NettyRemotingAbstract {
             }
         }
 
-        // 如果拒绝
+        // 如果需要拒绝这个请求
         if (pair.getObject1().rejectRequest()) {
-            RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_BUSY, "[REJECTREQUEST]system busy, start flow control for a while");
+            RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_BUSY, "[REJECTREQUEST]system busy, start flow control for a while");
+            response.setOpaque(opaque); // 设定隐藏编号
+
         }
 
     }
@@ -188,8 +188,7 @@ public abstract class NettyRemotingAbstract {
      * @throws RemotingTimeoutException
      * @throws RemotingSendRequestException
      */
-    public void invokeOnewayImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis)
-            throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
+    public void invokeOnewayImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis) throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
         request.markOnewayRPC();
         boolean acquired = this.semaphoreOneway.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
         if (acquired) {
@@ -202,7 +201,17 @@ public abstract class NettyRemotingAbstract {
                     }
                 });
             } catch (Exception e) {
-
+                once.release();
+                log.warn("write send a request command to channel <" + channel.remoteAddress() + "> failed.");
+                throw new RemotingSendRequestException(RemotingHelper.parseChannelRemoteAddr(channel), e);
+            }
+        } else {
+            if (timeoutMillis <= 0) {
+                throw new RemotingTooMuchRequestException("invokeOnewayImpl invoke too fast");
+            } else {
+                String info = String.format("invokeOnewayImpl tryAcquire semaphore timeout, %dms, waiting thread nums: %d semaphoreOnewayValue: %d", timeoutMillis, this.semaphoreOneway.getQueueLength(), this.semaphoreOneway.availablePermits());
+                log.warn(info);
+                throw new RemotingTimeoutException(info);
             }
         }
     }
@@ -215,8 +224,126 @@ public abstract class NettyRemotingAbstract {
         writeResponse(channel, request, response, null);
     }
 
+    public static void writeResponse(Channel channel, RemotingCommand request, @Nullable RemotingCommand response, Consumer<Future<?>> callback) {
+        if (response == null) {
+            return;
+        }
+        AttributesBuilder attributesBuilder = RemotingMetricsManager.newAttributesBuilder().put(LABEL_IS_LONG_POLLING, request.isSuspended()).put(LABEL_REQUEST_CODE, RemotingHelper.getRequestCodeDesc(request.getCode())).put(LABEL_RESPONSE_CODE, RemotingHelper.getResponseCodeDesc(response.getCode()));
+
+        if (request.isOnewayRPC()) { // one way RPC 不需要回复
+            attributesBuilder.put(LABEL_RESULT, RESULT_ONEWAY);
+            RemotingMetricsManager.rpcLatency.record(request.getProcessTimer().elapsed(TimeUnit.MILLISECONDS), attributesBuilder.build());
+            return;
+        }
+        response.setOpaque(request.getOpaque());
+        response.markResponseType();
+
+        // 发送信息
+        try {
+            // 写数据 + 监听回调
+            channel.writeAndFlush(response).addListener((ChannelFutureListener) future -> {
+                if (future.isSuccess()) {
+                    log.debug("Response[request code: {}, response code: {}, opaque: {}] is written to channel{}", request.getCode(), response.getCode(), response.getOpaque(), channel);
+                } else {
+                    log.error("Failed to write response[request code: {}, response code: {}, opaque: {}] to channel{}", request.getCode(), response.getCode(), response.getOpaque(), channel, future.cause());
+                }
+                attributesBuilder.put(LABEL_RESULT, RemotingMetricsManager.getWriteAndFlushResult(future));
+                RemotingMetricsManager.rpcLatency.record(request.getProcessTimer().elapsed(TimeUnit.MILLISECONDS), attributesBuilder.build());
+                if (callback != null) {
+                    callback.accept(future);
+                }
+            });
+        } catch (Throwable e) {
+            log.error("process request over, but response failed", e);
+            log.error(request.toString());
+            log.error(response.toString());
+            attributesBuilder.put(LABEL_RESULT, RESULT_WRITE_CHANNEL_FAILED);
+            RemotingMetricsManager.rpcLatency.record(request.getProcessTimer().elapsed(TimeUnit.MILLISECONDS), attributesBuilder.build());
+        }
+
+
+    }
+
     /**
+     * 创建一个请求任务
      *
+     * @param ctx    Netty 上下文
+     * @param cmd    cmd对象
+     * @param pair   请求处理器 - 执行器
+     * @param opaque 隐藏码
+     * @return
+     */
+    private Runnable buildProcessRequestHandler(ChannelHandlerContext ctx, RemotingCommand cmd, Pair<NettyRequestProcessor, ExecutorService> pair, int opaque) {
+        return () -> {
+            Exception exception = null;
+            RemotingCommand response;
+            String remoteAddr = null;
+
+            try {
+                remoteAddr = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
+                // before call
+                try {
+                    doBeforeRpcHooks(remoteAddr, cmd);
+                } catch (AbortProcessException e) {
+                    throw e;
+                } catch (Exception e) {
+                    exception = e;
+                }
+
+                if (exception == null) {
+                    response = pair.getObject1().processRequest(ctx, cmd);
+                } else {
+                    response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_ERROR, null);
+                }
+
+                // after call
+                try {
+                    doAfterRpcHooks(remoteAddr, cmd, response);
+                } catch (AbortProcessException e) {
+                    throw e;
+                } catch (Exception e) {
+                    exception = e;
+                }
+
+                if (exception != null) {
+                    throw exception;
+                }
+                writeResponse(ctx.channel(), cmd, response);
+            } catch (AbortProcessException e) {
+                response = RemotingCommand.createResponseCommand(e.getResponseCode(), e.getErrorMessage());
+                response.setOpaque(opaque);
+                writeResponse(ctx.channel(), cmd, response);
+            } catch (Throwable e) {
+                log.error("process request exception, remoteAddr: {}", remoteAddr, e);
+                log.error(cmd.toString());
+
+                if (!cmd.isOnewayRPC()) {
+                    response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_ERROR, UtilAll.exceptionSimpleDesc(e));
+                    response.setOpaque(opaque);
+                    writeResponse(ctx.channel(), cmd, response);
+                }
+            }
+        }
+    }
+
+    protected void doBeforeRpcHooks(String addr, RemotingCommand request) {
+        if (rpcHooks.size() > 0) {
+            for (RPCHook rpcHook : rpcHooks) {
+                rpcHook.doBeforeRequest(addr, request);
+            }
+        }
+    }
+
+    public void doAfterRpcHooks(String addr, RemotingCommand request, RemotingCommand response) {
+        if (rpcHooks.size() > 0) {
+            for (RPCHook rpcHook : rpcHooks) {
+                rpcHook.doAfterResponse(addr, request, response);
+            }
+        }
+    }
+
+    /**
+     * Netty 事件执行器
      */
     class NettyEventExecutor extends ServiceThread {
 
