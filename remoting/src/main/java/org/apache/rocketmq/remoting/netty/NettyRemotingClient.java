@@ -7,6 +7,9 @@ import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.proxy.Socks5ProxyHandler;
+import io.netty.handler.timeout.IdleStateHandler;
+import io.netty.resolver.NoopAddressResolverGroup;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
@@ -28,6 +31,7 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.proxy.SocksProxyConfig;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.security.cert.CertificateException;
 import java.util.*;
 import java.util.concurrent.*;
@@ -77,15 +81,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         this(nettyClientConfig, null);
     }
 
-    public NettyRemotingClient(final NettyClientConfig nettyClientConfig,
-                               final ChannelEventListener channelEventListener) {
+    public NettyRemotingClient(final NettyClientConfig nettyClientConfig, final ChannelEventListener channelEventListener) {
         this(nettyClientConfig, channelEventListener, null, null);
     }
 
-    public NettyRemotingClient(final NettyClientConfig nettyClientConfig,
-                               final ChannelEventListener channelEventListener,
-                               final EventLoopGroup eventLoopGroup,
-                               final EventExecutorGroup eventExecutorGroup) {
+    public NettyRemotingClient(final NettyClientConfig nettyClientConfig, final ChannelEventListener channelEventListener, final EventLoopGroup eventLoopGroup, final EventExecutorGroup eventExecutorGroup) {
         // NettyRemotingAbstract
         super(nettyClientConfig.getClientOnewaySemaphoreValue(), nettyClientConfig.getClientAsyncSemaphoreValue());
         this.nettyClientConfig = nettyClientConfig;
@@ -101,8 +101,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
         this.publicExecutor = Executors.newFixedThreadPool(publicThreadNums, new ThreadFactoryImpl("NettyClientPublicExecutor_"));
 
-        this.scanExecutor = ThreadUtils.newThreadPoolExecutor(4, 10, 60, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(32), new ThreadFactoryImpl("NettyClientScan_thread_"));
+        this.scanExecutor = ThreadUtils.newThreadPoolExecutor(4, 10, 60, TimeUnit.SECONDS, new ArrayBlockingQueue<>(32), new ThreadFactoryImpl("NettyClientScan_thread_"));
         if (eventLoopGroup != null) {
             this.eventLoopGroupWorker = eventLoopGroup;
         } else {
@@ -131,9 +130,8 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     private void loadSocksProxyJson() {
         // 告诉将对象编码成为 Map<String, SocksProxyConfig>
-        Map<String, SocksProxyConfig> sockProxyMap = JSON.parseObject(
-                nettyClientConfig.getSocksProxyConfig(), new TypeReference<Map<String, SocksProxyConfig>>() {
-                });
+        Map<String, SocksProxyConfig> sockProxyMap = JSON.parseObject(nettyClientConfig.getSocksProxyConfig(), new TypeReference<Map<String, SocksProxyConfig>>() {
+        });
         if (sockProxyMap != null) {
             proxyMap.putAll(sockProxyMap);
         }
@@ -194,8 +192,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     public void start() {
         if (this.defaultEventExecutorGroup == null) {
             // 适合在Pipeline中进行耗时阻塞或者CPU密集型的逻辑
-            this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
-                    nettyClientConfig.getClientWorkerThreads(), // 4
+            this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(nettyClientConfig.getClientWorkerThreads(), // 4
                     new ThreadFactoryImpl("NettyClientWorkerThread_"));
         }
 
@@ -232,9 +229,8 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         String cidr = proxyEntry.getKey();
         SocksProxyConfig socksProxyConfig = proxyEntry.getValue();
 
-        LOGGER.info("Netty fetch bootstrap, addr: {}, cidr: {}, proxy: {}",
-                addr, cidr, socksProxyConfig != null ? socksProxyConfig.getAddr() : "");
-        
+        LOGGER.info("Netty fetch bootstrap, addr: {}, cidr: {}, proxy: {}", addr, cidr, socksProxyConfig != null ? socksProxyConfig.getAddr() : "");
+
         Bootstrap bootstrapWithProxy = bootstrapMap.get(cidr); // client 初始化的时候会保存 代理的 bootstrap 对象
         if (bootstrapWithProxy == null) {
             bootstrapWithProxy = createBootstrap(socksProxyConfig);
@@ -258,11 +254,46 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                         ChannelPipeline pipeline = ch.pipeline();
                         if (nettyClientConfig.isUseTLS()) {
                             if (null != sslContext) {
-                                pipeline.addFirst(defaultEventExecutorGroup)
+                                // SSL 操作需要使用 sslContext 配置好之后 然后创建 Handler
+                                pipeline.addFirst(defaultEventExecutorGroup, "sslHandler", sslContext.newHandler(ch.alloc()));
+                            } else { // 不适用 SSL
+                                LOGGER.warn("Connections are insecure as SSLContext is null!");
                             }
                         }
+
+                        // Netty Socks5 Proxy - 代理协议
+                        if (proxy != null) {
+                            // proxy 对象中有地址 用户名 密码... 就是个代理-- 不过用代理还是加密通信更靠谱点儿
+                            String[] hostAndPort = getHostAndPort(proxy.getAddr());
+                            /**
+                             * 在 Netty 中，Encoder 和 Decoder 是用于处理消息编解码的组件。对于 SOCKS5 协议，Netty 提供了一些专门的类来处理 SOCKS5 消息的编码和解码。这些类位于 io.netty.handler.codec.socksx.v5 包中，主要包括：
+                             * Socks5AddressDecoder 和 Socks5AddressEncoder：用于将 SOCKS5 地址字段在字符串表示和二进制表示之间进行转换。
+                             * Socks5ClientEncoder 和 Socks5ServerEncoder：用于将客户端和服务器端的 SOCKS5 消息编码成 ByteBuf，以便通过网络发送。
+                             * Socks5CommandRequestDecoder 和 Socks5CommandResponseDecoder：用于解码客户端发送的命令请求和服务器返回的命令响应。
+                             */
+                            pipeline.addFirst(new Socks5ProxyHandler(new InetSocketAddress(hostAndPort[0], Integer.parseInt(hostAndPort[1])), proxy.getUsername(), proxy.getPassword()));
+
+                        }
+
+                        pipeline.addLast(
+                                nettyClientConfig.isDisableNettyWorkerGroup() ? null : defaultEventExecutorGroup,
+                                new NettyEncoder(), // MessageToByte 将 RemotingCommand -> ByteBuf
+                                new NettyDecoder(), // ByteBuf -> RemotingCommand ; 实现了 LengthFieldBasedFrameDecoder
+                                new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()),
+                                new NettyConnectManageHandler(),
+                                new NettyClientHandler());
+                                )
+
                     }
-                })
+                });
+        // Support Netty Socks5 Proxy
+        if (proxy != null) {
+            // 没有操作的地址解析器
+            // 不进行 DNS 操作，避免客户端 DNS 解析，将地址转发。
+            bootstrap.resolver(NoopAddressResolverGroup.INSTANCE);
+        }
+
+        return bootstrap;
 
     }
 
