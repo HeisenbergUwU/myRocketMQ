@@ -1,13 +1,19 @@
 package org.apache.rocketmq.remoting.netty;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.TypeReference;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.HashedWheelTimer;
+import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.constant.LoggerName;
+import org.apache.rocketmq.common.utils.ThreadUtils;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.ChannelEventListener;
@@ -21,10 +27,10 @@ import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.proxy.SocksProxyConfig;
 
+import java.io.IOException;
+import java.security.cert.CertificateException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
@@ -54,17 +60,17 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     private final ConcurrentMap<String, Boolean> availableNamesrvAddrMap = new ConcurrentHashMap<>();
     private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<>();
     private final AtomicInteger namesrvIndex = new AtomicInteger(initValueIndex()); // <= 999
-    private final Lock namesrvChannelLock = new ReentrantLock();
+    private final Lock namesrvChannelLock = new ReentrantLock(); // namesrv 频道锁
 
-    private final ExecutorService publicExecutor;
-    private final ExecutorService scanExecutor;
+    private final ExecutorService publicExecutor; // 公共线程池
+    private final ExecutorService scanExecutor; // 搜搜线程池，搜 集群的
 
     /**
      * Invoke the callback methods in this executor when process response.
      */
-    private ExecutorService callbackExecutor;
-    private final ChannelEventListener channelEventListener;
-    private EventExecutorGroup defaultEventExecutorGroup;
+    private ExecutorService callbackExecutor; // 回调函数执行器
+    private final ChannelEventListener channelEventListener; // channel 回调
+    private EventExecutorGroup defaultEventExecutorGroup; // workers
 
 
     public NettyRemotingClient(final NettyClientConfig nettyClientConfig) {
@@ -74,6 +80,63 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     public NettyRemotingClient(final NettyClientConfig nettyClientConfig,
                                final ChannelEventListener channelEventListener) {
         this(nettyClientConfig, channelEventListener, null, null);
+    }
+
+    public NettyRemotingClient(final NettyClientConfig nettyClientConfig,
+                               final ChannelEventListener channelEventListener,
+                               final EventLoopGroup eventLoopGroup,
+                               final EventExecutorGroup eventExecutorGroup) {
+        // NettyRemotingAbstract
+        super(nettyClientConfig.getClientOnewaySemaphoreValue(), nettyClientConfig.getClientAsyncSemaphoreValue());
+        this.nettyClientConfig = nettyClientConfig;
+        this.channelEventListener = channelEventListener;
+
+        this.loadSocksProxyJson(); // 从代理 json 中加载相关信息
+
+        int publicThreadNums = nettyClientConfig.getClientCallbackExecutorThreads();
+        // 默认是4个线程
+        if (publicThreadNums <= 0) {
+            publicThreadNums = 4;
+        }
+
+        this.publicExecutor = Executors.newFixedThreadPool(publicThreadNums, new ThreadFactoryImpl("NettyClientPublicExecutor_"));
+
+        this.scanExecutor = ThreadUtils.newThreadPoolExecutor(4, 10, 60, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(32), new ThreadFactoryImpl("NettyClientScan_thread_"));
+        if (eventLoopGroup != null) {
+            this.eventLoopGroupWorker = eventLoopGroup;
+        } else {
+            // NioEventLoopGroup 使用 ThreadFactory 的方式是通过构造函数注入的。
+            this.eventLoopGroupWorker = new NioEventLoopGroup(1, new ThreadFactoryImpl("NettyClientSelector_"));
+        }
+        this.defaultEventExecutorGroup = eventExecutorGroup;
+
+        if (nettyClientConfig.isUseTLS()) {
+            try {
+                sslContext = TlsHelper.buildSslContext(true);
+                LOGGER.info("SSL enabled for client");
+            } catch (IOException e) {
+                LOGGER.error("Failed to create SSLContext", e);
+            } catch (CertificateException e) {
+                LOGGER.error("Failed to create SSLContext", e);
+                throw new RuntimeException("Failed to create SSLContext", e);
+            }
+        }
+    }
+
+    private static int initValueIndex() {
+        Random r = new Random();
+        return r.nextInt(999);
+    }
+
+    private void loadSocksProxyJson() {
+        // 告诉将对象编码成为 Map<String, SocksProxyConfig>
+        Map<String, SocksProxyConfig> sockProxyMap = JSON.parseObject(
+                nettyClientConfig.getSocksProxyConfig(), new TypeReference<Map<String, SocksProxyConfig>>() {
+                });
+        if (sockProxyMap != null) {
+            proxyMap.putAll(sockProxyMap);
+        }
     }
 
 
@@ -129,6 +192,12 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     @Override
     public void start() {
+        if (this.defaultEventExecutorGroup == null) {
+            // 适合在Pipeline中进行耗时阻塞或者CPU密集型的逻辑
+            this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
+                    nettyClientConfig.getClientWorkerThreads(), // 4
+                    new ThreadFactoryImpl("NettyClientWorkerThread_"));
+        }
 
     }
 
@@ -165,6 +234,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
         LOGGER.info("Netty fetch bootstrap, addr: {}, cidr: {}, proxy: {}",
                 addr, cidr, socksProxyConfig != null ? socksProxyConfig.getAddr() : "");
+        
         Bootstrap bootstrapWithProxy = bootstrapMap.get(cidr); // client 初始化的时候会保存 代理的 bootstrap 对象
         if (bootstrapWithProxy == null) {
             bootstrapWithProxy = createBootstrap(socksProxyConfig);
@@ -214,11 +284,6 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     protected String[] getHostAndPort(String address) {
         int split = address.lastIndexOf(":");
         return split < 0 ? new String[]{address} : new String[]{address.substring(0, split), address.substring(split + 1)};
-    }
-
-    private static int initValueIndex() {
-        Random r = new Random();
-        return r.nextInt(999);
     }
 
     class ChannelWrapper {

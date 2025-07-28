@@ -40,17 +40,18 @@ public class TlsSystemConfig {
      */
     public static String tlsServerNeedClientAuth = System.getProperty(TLS_SERVER_NEED_CLIENT_AUTH, "none");
     /**
-     * The store path of server-side private key
+     * The store path of server-side private key : 服务端私钥保存地址
      */
     public static String tlsServerKeyPath = System.getProperty(TLS_SERVER_KEYPATH, null);
 
     /**
-     * The  password of the server-side private key
+     * The  password of the server-side private key ： 服务端密码
      */
     public static String tlsServerKeyPassword = System.getProperty(TLS_SERVER_KEYPASSWORD, null);
 
     /**
-     * The store path of server-side X.509 certificate chain in PEM format
+     * The store path of server-side X.509 certificate chain in PEM format ： PEM 文件是一个通用的容器格式
+     * - 证书链（chain）包含：服务器证书 → 中间 CA → 根 CA。客户端按顺序验证签名，直到能追溯到信任的根 CA
      */
     public static String tlsServerCertPath = System.getProperty(TLS_SERVER_CERTPATH, null);
 

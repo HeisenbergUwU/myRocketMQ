@@ -1,9 +1,7 @@
 package org.example.netty.s1;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelInitializer;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -24,7 +22,8 @@ public class EventLoopClient {
          *     .channel()                          // ② 获取连接后的 Channel 实例
          *     .writeAndFlush("hello world");      // 通过 Channel 发送数据
          */
-        NioEventLoopGroup eventExecutors = new NioEventLoopGroup(1);
+//        NioEventLoopGroup eventExecutors = new NioEventLoopGroup(1);
+        DefaultEventLoopGroup eventExecutors = new DefaultEventLoopGroup(1); // 不具备使用 selector 驱动机制，无法处理connect
         new Bootstrap()
                 .group(eventExecutors)
                 .channel(NioSocketChannel.class)
