@@ -1,5 +1,7 @@
 package org.apache.rocketmq.remoting.netty;
 
+import org.apache.rocketmq.remoting.common.TlsMode;
+
 import static org.apache.rocketmq.remoting.netty.TlsSystemConfig.TLS_ENABLE;
 
 public class NettyClientConfig {
