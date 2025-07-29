@@ -16,6 +16,7 @@ import io.netty.util.concurrent.EventExecutorGroup;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.constant.LoggerName;
+import org.apache.rocketmq.common.utils.NetworkUtil;
 import org.apache.rocketmq.common.utils.ThreadUtils;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
@@ -32,6 +33,7 @@ import org.apache.rocketmq.remoting.proxy.SocksProxyConfig;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.security.cert.CertificateException;
 import java.util.*;
 import java.util.concurrent.*;
@@ -279,7 +281,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                                 nettyClientConfig.isDisableNettyWorkerGroup() ? null : defaultEventExecutorGroup,
                                 new NettyEncoder(), // MessageToByte 将 RemotingCommand -> ByteBuf
                                 new NettyDecoder(), // ByteBuf -> RemotingCommand ; 实现了 LengthFieldBasedFrameDecoder
-                                new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()),
+                                new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()), // 默认 120 秒，
                                 new NettyConnectManageHandler(),
                                 new NettyClientHandler());
                                 )
@@ -295,6 +297,31 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
         return bootstrap;
 
+    }
+
+    public class NettyClientHandler extends SimpleChannelInboundHandler<RemotingCommand> {
+
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
+            processMessageReceived(ctx, msg);
+        }
+    }
+
+    public class NettyConnectManagHandler extends ChannelDuplexHandler {
+        @Override
+        public void connect(ChannelHandlerContext ctx, SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) throws Exception {
+            // 本机地址
+            final String local = localAddress == null ? NetworkUtil.getLocalAddress() : RemotingHelper.parseSocketAddressAddr(localAddress);
+            // 远端地址
+            final String remote = remoteAddress == null ? "UNKNOWN" : RemotingHelper.parseSocketAddressAddr(remoteAddress);
+            LOGGER.info("NETTY CLIENT PIPELINE: CONNECT  {} => {}", local, remote);
+            super.connect(ctx, remoteAddress, localAddress, promise);
+            // 发送一个CONNECT事件给 ctx.channel
+            if(NettyRemotingClient.this.channelEventListener != null)
+            {
+                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CONNECT,remote,ctx.channel())); // 发送给 channel。
+            }
+        }
     }
 
     private Map.Entry<String, SocksProxyConfig> getProxy(String addr) {
