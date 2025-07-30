@@ -54,10 +54,10 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     private final Bootstrap bootstrap = new Bootstrap();
     private final EventLoopGroup eventLoopGroupWorker; // ThreadPool
     private final Lock lockChannelTables = new ReentrantLock();
-    private final Map<String /* cidr */, SocksProxyConfig /* proxy */> proxyMap = new HashMap<>();
-    private final ConcurrentHashMap<String /* cidr */, Bootstrap> bootstrapMap = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<>();
-    private final ConcurrentMap<Channel, ChannelWrapper> channelWrapperTables = new ConcurrentHashMap<>();
+    private final Map<String /* cidr */, SocksProxyConfig /* proxy */> proxyMap = new HashMap<>(); // IP:PORT - Socks5配置
+    private final ConcurrentHashMap<String /* cidr */, Bootstrap> bootstrapMap = new ConcurrentHashMap<>(); // IP:PORT - Bootstrap启动对象
+    private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<>(); // IP - ChannelWrapper
+    private final ConcurrentMap<Channel, ChannelWrapper> channelWrapperTables = new ConcurrentHashMap<>(); // Channel - ChannelWrapper
     // 它是 Netty 提供的 高性能定时器实现类，基于哈希时间轮（Timing Wheel）算法，专门用于 延迟、超时等“近似”定时任务调度，尤其适合大量 I/O 相关的定时处理场景（如心跳、连接超时）
     // 插入新任务 o(1) ，用于心跳检测等等.... 定时器，比 ScheduledThreadPoolExecutor 高效
     private final HashedWheelTimer timer = new HashedWheelTimer(r -> new Thread(r, "ClientHouseKeepingService"));
@@ -236,7 +236,12 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         Bootstrap bootstrapWithProxy = bootstrapMap.get(cidr); // client 初始化的时候会保存 代理的 bootstrap 对象
         if (bootstrapWithProxy == null) {
             bootstrapWithProxy = createBootstrap(socksProxyConfig);
+            Bootstrap old = bootstrapMap.putIfAbsent(cidr, bootstrapWithProxy); // 服用 bootstrap 对象
+            if (old != null) {
+                bootstrapWithProxy = old;
+            }
         }
+        return bootstrapWithProxy;
     }
 
 
@@ -284,8 +289,6 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                                 new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()), // 默认 120 秒，
                                 new NettyConnectManageHandler(),
                                 new NettyClientHandler());
-                                )
-
                     }
                 });
         // Support Netty Socks5 Proxy
@@ -299,15 +302,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     }
 
-    public class NettyClientHandler extends SimpleChannelInboundHandler<RemotingCommand> {
-
-        @Override
-        protected void channelRead0(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
-            processMessageReceived(ctx, msg);
-        }
-    }
-
-    public class NettyConnectManagHandler extends ChannelDuplexHandler {
+    public class NettyConnectManageHandler extends ChannelDuplexHandler {
         @Override
         public void connect(ChannelHandlerContext ctx, SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) throws Exception {
             // 本机地址
@@ -317,12 +312,147 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             LOGGER.info("NETTY CLIENT PIPELINE: CONNECT  {} => {}", local, remote);
             super.connect(ctx, remoteAddress, localAddress, promise);
             // 发送一个CONNECT事件给 ctx.channel
-            if(NettyRemotingClient.this.channelEventListener != null)
-            {
-                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CONNECT,remote,ctx.channel())); // 发送给 channel。
+            if (NettyRemotingClient.this.channelEventListener != null) {
+                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CONNECT, remote, ctx.channel())); // 发送给 channel。
             }
         }
+
+        @Override
+        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
+            LOGGER.info("NETTY CLIENT PIPELINE: ACTIVE, {}, channelId={}", remoteAddress, ctx.channel().id());
+            super.channelActive(ctx);
+
+            if (NettyRemotingClient.this.channelEventListener != null) {
+                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.ACTIVE, remoteAddress, ctx.channel()));
+            }
+        }
+
+        @Override
+        public void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+            final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
+            LOGGER.info("NETTY CLIENT PIPELINE: DISCONNECT {}", remoteAddress);
+            closeChannel(ctx.channel());
+            super.disconnect(ctx, promise);
+
+            if (NettyRemotingClient.this.channelEventListener != null) {
+                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CLOSE, remoteAddress, ctx.channel()));
+            }
+        }
+
+        @Override
+        public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+            final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
+            LOGGER.info("NETTY CLIENT PIPELINE: CLOSE channel[addr={}, id={}]", remoteAddress, ctx.channel().id());
+            closeChannel(ctx.channel());
+            super.close(ctx, promise);
+            NettyRemotingClient.this.failFast(ctx.channel());
+            if (NettyRemotingClient.this.channelEventListener != null) {
+                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CLOSE, remoteAddress, ctx.channel()));
+            }
+        }
+
+
+        @Override
+        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+            final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
+            LOGGER.info("NETTY CLIENT PIPELINE: channelInactive, the channel[addr={}, id={}]", remoteAddress, ctx.channel().id());
+            closeChannel(ctx.channel());
+            super.channelInactive(ctx);
+        }
+
+        // 用户事件扳机，用来处理事件回调
+        @Override
+        public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+            super.userEventTriggered(ctx, evt);
+        }
     }
+
+    public void closeChannel(final String addr, final Channel channel) {
+        if (null == channel) {
+            return;
+        }
+
+        final String addrRemote = null == addr ? RemotingHelper.parseChannelRemoteAddr(channel) : addr;
+
+        try {
+            if (this.lockChannelTables.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+                try {
+                    boolean removeItemFromTable = true;
+                    final ChannelWrapper prevCW = this.channelTables.get(addrRemote);
+                } catch (Exception e) {
+                    LOGGER.error("closeChannel: close the channel exception", e);
+                } finally {
+                    this.lockChannelTables.unlock();
+                }
+            }
+        } catch (InterruptedException e) {
+            LOGGER.error("closeChannel exception", e);
+        }
+    }
+
+    public void closeChannel(final Channel channel) {
+        if (null == channel) {
+            return;
+        }
+
+        try {
+            if (this.lockChannelTables.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+                try {
+                    boolean removeItemFromTable = true;
+                    ChannelWrapper prevCW = null;
+                    String addrRemote = null;
+                    for (Map.Entry<String, ChannelWrapper> entry : channelTables.entrySet()) {
+                        String key = entry.getKey();
+                        ChannelWrapper prev = entry.getValue();
+                        if (prev.isWrapperOf(channel)) {
+                            prevCW = prev;
+                            addrRemote = key;
+                            break;
+                        }
+                    }
+
+                    if (null == prevCW) {
+                        LOGGER.info("eventCloseChannel: the channel[addr={}, id={}] has been removed from the channel table before", RemotingHelper.parseChannelRemoteAddr(channel), channel.id());
+                        removeItemFromTable = false;
+                    }
+
+                    if (removeItemFromTable) {
+                        ChannelWrapper channelWrapper = this.channelWrapperTables.remove(channel);
+                        if (channelWrapper != null && channelWrapper.tryClose(channel)) {
+                            this.channelTables.remove(addrRemote);
+                        }
+                        LOGGER.info("closeChannel: the channel[addr={}, id={}] was removed from channel table", addrRemote, channel.id());
+                        RemotingHelper.closeChannel(channel);
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("closeChannel: close the channel[id={}] exception", channel.id(), e);
+                } finally {
+                    this.lockChannelTables.unlock();
+                }
+            } else {
+                LOGGER.warn("closeChannel: try to lock channel table, but timeout, {}ms", LOCK_TIMEOUT_MILLIS);
+            }
+        } catch (InterruptedException e) {
+            LOGGER.error("closeChannel exception", e);
+        }
+    }
+
+    private void updateChannelLastResponseTime(final String addr) {
+        String address = addr;
+        if (address == null) {
+            address = this.namesrvAddrChoosed.get();
+        }
+        if (address == null) {
+            LOGGER.warn("[updateChannelLastResponseTime] could not find address!!");
+            return;
+        }
+        ChannelWrapper channelWrapper = this.channelTables.get(address);
+        if (channelWrapper != null && channelWrapper.isOK()) {
+            channelWrapper.updateLastResponseTime(); // channelWrapper 中的时间。
+        }
+    }
+
 
     private Map.Entry<String, SocksProxyConfig> getProxy(String addr) {
         if (StringUtils.isBlank(addr) || !addr.contains(":")) {
@@ -344,6 +474,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return split < 0 ? new String[]{address} : new String[]{address.substring(0, split), address.substring(split + 1)};
     }
 
+    /**
+     * Channel 对象是一次性的，如果发生关闭、写超时、Idle超时都会断开连接，需要重新进行连接
+     */
     class ChannelWrapper {
         private final ReentrantReadWriteLock lock; // 读锁
         private ChannelFuture channelFuture;
@@ -409,7 +542,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 try {
                     if (isWrapperOf(channel)) {
                         channelToClose = channelFuture;
-                        channelFuture = doConnect(channelAddress);
+                        channelFuture = doConnect(channelAddress); // IP:PORT
                         return true;
                     } else {
                         LOGGER.warn("channelWrapper has reconnect, so do nothing, now channelId={}, input channelId={}", getChannel().id(), channel.id());
@@ -450,6 +583,40 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             } finally {
                 lock.writeLock().unlock();
             }
+        }
+    }
+
+    class InvokeCallbackWrapper implements InvokeCallback {
+
+        private final InvokeCallback invokeCallback;
+        private final String addr;
+
+        public InvokeCallbackWrapper(InvokeCallback invokeCallback, String addr) {
+            this.invokeCallback = invokeCallback;
+            this.addr = addr;
+        }
+
+        @Override
+        public void operationComplete(ResponseFuture responseFuture) {
+            this.invokeCallback.operationComplete(responseFuture);
+        }
+
+        @Override
+        public void operationSucceed(RemotingCommand response) {
+            updateChannelLastResponseTime(addr); // 记录操作成功的网络状态，用来跟业务解耦。
+            this.invokeCallback.operationSucceed(response);
+        }
+
+        @Override
+        public void operationFail(final Throwable throwable) {
+            this.invokeCallback.operationFail(throwable);
+        }
+    }
+
+    public class NettyClientHandler extends SimpleChannelInboundHandler<RemotingCommand> {
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
+            processMessageReceived(ctx, msg);
         }
     }
 }
