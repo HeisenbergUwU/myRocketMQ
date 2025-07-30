@@ -24,6 +24,18 @@ public class AQSTest {
     }
 }
 
+/**
+ * [tryAcquire CAS 失败]
+ * ↓
+ * 构建 Node → 加入 FIFO 队列尾部
+ * ↓
+ * LockSupport.park() → 线程阻塞
+ * ↓（release 发生）
+ * LockSupport.unpark(head.next) → 唤醒线程
+ * ↓
+ * 被唤醒线程重新尝试获取锁（CAS）
+ * > ReentrantLock is more performant than synchronized... locking a ReentrantLock just sets its state from 0 to 1, while synchronized involves object header state, potential inflation, and CAS
+ */
 class SimpleReentrantLock {
     private final Sync sync = new Sync();
 
