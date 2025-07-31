@@ -89,14 +89,13 @@ public abstract class NettyRemotingAbstract {
             new ConcurrentHashMap<>(256);
 
     /**
-     * This container holds all processors per request code, aka, for each incoming request, we may look up the
-     * responding processor in this map to handle the request.
+     * 请求码 - 处理器 ： 每次来了请求都会在表中查询一下是否可以处理
      */
     protected final HashMap<Integer/* request code */, Pair<NettyRequestProcessor, ExecutorService>> processorTable =
             new HashMap<>(64);
 
     /**
-     * Executor to feed netty events to user defined {@link ChannelEventListener}.
+     * 处理 ChannelEventListener 的线程池
      */
     protected final NettyEventExecutor nettyEventExecutor = new NettyEventExecutor();
 
@@ -152,19 +151,19 @@ public abstract class NettyRemotingAbstract {
     }
 
     /**
-     * Entry of incoming command processing.
+     * 将到来的信息的入口
+     * - The incoming remoting command may be
+     *      - 远程询问模块发来的信息
+     *      - A response to a previous request issued by this very participant.
+     *      【issued by - 由...发布；this very participant - 特指前一个人】
+     *      ChatGPT 说：
+     * 短语 this very participant 表示：
      *
-     * <p>
-     * <strong>Note:</strong>
-     * The incoming remoting command may be
-     * <ul>
-     * <li>An inquiry request from a remote peer component;</li>
-     * <li>A response to a previous request issued by this very participant.</li>
-     * </ul>
-     * </p>
+     * this: 特指当前上下文中的那一个（参与者）。
      *
-     * @param ctx Channel handler context.
-     * @param msg incoming remoting command.
+     * very: 强调“就是那个”。
+     *
+     * participant: 参与者，即“那个发请求或参与的人”。
      */
     public void processMessageReceived(ChannelHandlerContext ctx, RemotingCommand msg) {
         if (msg != null) {
@@ -709,7 +708,6 @@ public abstract class NettyRemotingAbstract {
                                 break;
                             default:
                                 break;
-
                         }
                     }
                 } catch (Exception e) {
