@@ -51,7 +51,7 @@ public class ResponseFuture {
 
     public void executeInvokeCallback() {
         if (invokeCallback != null) {
-            if (this.executeCallbackOnlyOnce.compareAndSet(false, true)) {
+            if (this.executeCallbackOnlyOnce.compareAndSet(false, true)) { // 只执行一次
                 RemotingCommand response = getResponseCommand();
                 if (response != null) {
                     invokeCallback.operationSucceed(response);

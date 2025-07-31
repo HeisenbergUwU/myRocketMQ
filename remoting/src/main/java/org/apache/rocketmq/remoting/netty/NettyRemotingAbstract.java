@@ -83,7 +83,7 @@ public abstract class NettyRemotingAbstract {
     protected final Semaphore semaphoreAsync;
 
     /**
-     * 缓存正在运行的请求 隐藏码 -
+     * 缓存正在运行的请求 隐藏码 - Response 未来容器
      */
     protected final ConcurrentMap<Integer /* opaque */, ResponseFuture> responseTable =
             new ConcurrentHashMap<>(256);
