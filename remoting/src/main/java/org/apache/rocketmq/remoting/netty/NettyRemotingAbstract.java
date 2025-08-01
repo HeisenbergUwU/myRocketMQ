@@ -100,23 +100,22 @@ public abstract class NettyRemotingAbstract {
     protected final NettyEventExecutor nettyEventExecutor = new NettyEventExecutor();
 
     /**
-     * The default request processor to use in case there is no exact match in {@link #processorTable} per request
-     * code.
+     * {@link #processorTable} 中没有找到的就是用这个默认处理器
      */
     protected Pair<NettyRequestProcessor, ExecutorService> defaultRequestProcessorPair;
 
     /**
-     * SSL context via which to create {@link SslHandler}.
+     * {@link SslHandler} io.netty.handler.ssl, 用于配置和管理 SSL/TLS 加密通信环境
      */
     protected volatile SslContext sslContext;
 
     /**
-     * custom rpc hooks
+     * 自定义 rpc 钩子函数
      */
     protected List<RPCHook> rpcHooks = new ArrayList<>();
-
+    // RemotingCommand 执行链
     protected RequestPipeline requestPipeline;
-
+    // 判断是否正在执行关闭流程
     protected AtomicBoolean isShuttingDown = new AtomicBoolean(false);
 
     static {
@@ -124,8 +123,7 @@ public abstract class NettyRemotingAbstract {
     }
 
     /**
-     * Constructor, specifying capacity of one-way and asynchronous semaphores.
-     *
+     * 构造函数
      * @param permitsOneway Number of permits for one-way requests.
      * @param permitsAsync  Number of permits for asynchronous requests.
      */
