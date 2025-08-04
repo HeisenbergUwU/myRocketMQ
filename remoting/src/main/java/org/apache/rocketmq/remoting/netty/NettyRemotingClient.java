@@ -220,6 +220,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
             }
         };
+
+        this.timer.newTimeout(timerTaskScanResponseTable, 1000 * 3, TimeUnit.MILLISECONDS);
+
     }
 
 
