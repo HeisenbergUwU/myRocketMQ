@@ -7,7 +7,9 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
-
+/**
+ * Runnable 的 run 接口需要实际类去实现
+ */
 public abstract class ServiceThread implements Runnable {
     protected static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
 

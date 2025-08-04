@@ -451,6 +451,7 @@ public abstract class NettyRemotingAbstract {
 
     /**
      * <p>
+     * 周期性扫描、过期弃用的请求
      * This method is periodically invoked to scan and expire deprecated request.
      * </p>
      */
@@ -639,6 +640,9 @@ public abstract class NettyRemotingAbstract {
         return processorTable;
     }
 
+    /**
+     * LinkedBlockingQueue 中，保存 NettyEvent , 执行相关回调。
+     */
     class NettyEventExecutor extends ServiceThread {
         private final LinkedBlockingQueue<NettyEvent> eventQueue = new LinkedBlockingQueue<>();
 
@@ -646,7 +650,7 @@ public abstract class NettyRemotingAbstract {
             int currentSize = this.eventQueue.size();
             int maxSize = 10000;
             if (currentSize <= maxSize) {
-                this.eventQueue.add(event);
+                this.eventQueue.add(event); // add 会触发异常 offer 不会。都是插入尾巴
             } else {
                 log.warn("event queue size [{}] over the limit [{}], so drop this event {}", currentSize, maxSize, event.toString());
             }
@@ -660,6 +664,13 @@ public abstract class NettyRemotingAbstract {
 
             while (!this.isStopped()) {
                 try {
+                    /**
+                     * public class NettyEvent {
+                     *     private final NettyEventType type;
+                     *     private final String remoteAddr;
+                     *     private final Channel channel;
+                     *     }
+                     */
                     NettyEvent event = this.eventQueue.poll(3000, TimeUnit.MILLISECONDS);
                     if (event != null && listener != null) {
                         switch (event.getType()) {

@@ -3,6 +3,7 @@ package org.apache.rocketmq.remoting.netty;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -11,6 +12,8 @@ import io.netty.handler.proxy.Socks5ProxyHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.resolver.NoopAddressResolverGroup;
 import io.netty.util.HashedWheelTimer;
+import io.netty.util.Timeout;
+import io.netty.util.TimerTask;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 import org.apache.commons.lang3.StringUtils;
@@ -52,7 +55,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     protected final NettyClientConfig nettyClientConfig;
     private final Bootstrap bootstrap = new Bootstrap();
-    private final EventLoopGroup eventLoopGroupWorker; // ThreadPool
+    private final EventLoopGroup eventLoopGroupWorker; // 主要执行线程池，用来通信的
     private final Lock lockChannelTables = new ReentrantLock();
     private final Map<String /* cidr */, SocksProxyConfig /* proxy */> proxyMap = new HashMap<>(); // IP:PORT - Socks5配置
     private final ConcurrentHashMap<String /* cidr */, Bootstrap> bootstrapMap = new ConcurrentHashMap<>(); // IP:PORT - Bootstrap启动对象
@@ -87,7 +90,18 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         this(nettyClientConfig, channelEventListener, null, null);
     }
 
-    public NettyRemotingClient(final NettyClientConfig nettyClientConfig, final ChannelEventListener channelEventListener, final EventLoopGroup eventLoopGroup, final EventExecutorGroup eventExecutorGroup) {
+    /**
+     * 构造函数
+     *
+     * @param nettyClientConfig    nettyClient配置对象
+     * @param channelEventListener 事件回调接口
+     * @param eventLoopGroup       主执行线程池 注册 & 读写
+     * @param eventExecutorGroup   辅助线程池 业务线程任务
+     */
+    public NettyRemotingClient(final NettyClientConfig nettyClientConfig,
+                               final ChannelEventListener channelEventListener,
+                               final EventLoopGroup eventLoopGroup,
+                               final EventExecutorGroup eventExecutorGroup) {
         // NettyRemotingAbstract
         super(nettyClientConfig.getClientOnewaySemaphoreValue(), nettyClientConfig.getClientAsyncSemaphoreValue());
         this.nettyClientConfig = nettyClientConfig;
@@ -137,6 +151,75 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         if (sockProxyMap != null) {
             proxyMap.putAll(sockProxyMap);
         }
+    }
+
+    @Override
+    public void start() {
+        if (this.defaultEventExecutorGroup == null) {
+            // 适合在Pipeline中进行耗时阻塞或者CPU密集型的逻辑
+            this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(nettyClientConfig.getClientWorkerThreads(), // 4
+                    new ThreadFactoryImpl("NettyClientWorkerThread_")); // ThreadFactoryImpl - 创建线程，设定名称，
+        }
+
+        Bootstrap handler = this.bootstrap.group(this.eventLoopGroupWorker)
+                .channel(NioSocketChannel.class) // nio
+                .option(ChannelOption.TCP_NODELAY, true) // 禁用 nagle算法
+                .option(ChannelOption.SO_KEEPALIVE, false) // 探测 TCP Keep-Alive
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, nettyClientConfig.getConnectTimeoutMillis()) // 连接超时时间，默认 3000 ms
+                .handler(new ChannelInitializer<SocketChannel>() {
+
+                    @Override
+                    protected void initChannel(SocketChannel ch) throws Exception {
+                        ChannelPipeline pipeline = ch.pipeline();
+                        if (nettyClientConfig.isUseTLS()) {
+                            if (null != sslContext) {
+                                pipeline.addFirst(defaultEventExecutorGroup, "sslHandler", sslContext.newHandler(ch.alloc())); // sslHandler 使用默认执行线程池
+                                LOGGER.info("Prepend SSL handler");
+                            } else {
+                                LOGGER.warn("Connections are insecure as SSLContext is null!");
+                            }
+                        }
+                        // 如果关闭了worker线程池，那么使用 NIO 默认主线程池 -- null
+                        pipeline.addLast(nettyClientConfig.isDisableNettyWorkerGroup() ? null : defaultEventExecutorGroup,
+                                new NettyEncoder(), // RemotingCommand 编码器
+                                new NettyDecoder(), // RemotingCommand 解码器
+                                new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()), // 闲置处理器
+                                new NettyConnectManageHandler(), //
+                                new NettyClientHandler());
+                    }
+                });
+        if (nettyClientConfig.getClientSocketSndBufSize() > 0) {
+            LOGGER.info("client set SO_SNDBUF to {}", nettyClientConfig.getClientSocketSndBufSize());
+            handler.option(ChannelOption.SO_SNDBUF, nettyClientConfig.getClientSocketSndBufSize());
+        }
+        if (nettyClientConfig.getClientSocketRcvBufSize() > 0) {
+            LOGGER.info("client set SO_RCVBUF to {}", nettyClientConfig.getClientSocketRcvBufSize());
+            handler.option(ChannelOption.SO_RCVBUF, nettyClientConfig.getClientSocketRcvBufSize());
+        }
+        if (nettyClientConfig.getWriteBufferLowWaterMark() > 0 && nettyClientConfig.getWriteBufferHighWaterMark() > 0) {
+            LOGGER.info("client set netty WRITE_BUFFER_WATER_MARK to {},{}",
+                    nettyClientConfig.getWriteBufferLowWaterMark(), nettyClientConfig.getWriteBufferHighWaterMark());
+            handler.option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(
+                    nettyClientConfig.getWriteBufferLowWaterMark(), nettyClientConfig.getWriteBufferHighWaterMark()));
+        }
+        if (nettyClientConfig.isClientPooledByteBufAllocatorEnable()) {
+            handler.option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+        }
+
+        nettyEventExecutor.start();
+
+        TimerTask timerTaskScanResponseTable = new TimerTask() {
+            @Override
+            public void run(Timeout timeout) {
+                try {
+                    NettyRemotingClient.this.scanResponseTable();
+                } catch (Throwable e) {
+                    LOGGER.error("scanResponseTable exception", e);
+                } finally {
+                    timer.newTimeout(this, 1000, TimeUnit.MILLISECONDS);
+                }
+            }
+        };
     }
 
 
@@ -190,15 +273,6 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     }
 
-    @Override
-    public void start() {
-        if (this.defaultEventExecutorGroup == null) {
-            // 适合在Pipeline中进行耗时阻塞或者CPU密集型的逻辑
-            this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(nettyClientConfig.getClientWorkerThreads(), // 4
-                    new ThreadFactoryImpl("NettyClientWorkerThread_"));
-        }
-
-    }
 
     @Override
     public void shutdown() {
