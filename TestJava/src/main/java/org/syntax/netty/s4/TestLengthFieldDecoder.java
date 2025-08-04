@@ -13,64 +13,6 @@ import io.netty.handler.logging.LoggingHandler;
 
 import java.nio.charset.StandardCharsets;
 
-/**
- * import io.netty.buffer.ByteBuf;
- * import io.netty.buffer.Unpooled;
- * import io.netty.channel.ChannelHandlerContext;
- * import io.netty.channel.ChannelInboundHandlerAdapter;
- * import io.netty.channel.embedded.EmbeddedChannel;
- * import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
- * import io.netty.handler.logging.LoggingHandler;
- * import io.netty.handler.logging.LogLevel;
- * <p>
- * import java.nio.charset.StandardCharsets;
- * <p>
- * public class TestLengthFieldDecoder {
- * public static void main(String[] args) {
- * EmbeddedChannel channel = new EmbeddedChannel();
- * <p>
- * channel.pipeline()
- * .addLast(new LoggingHandler(LogLevel.DEBUG))
- * .addLast(new LengthFieldBasedFrameDecoder(
- * 1024, // maxFrameLength
- * 1,    // lengthFieldOffset
- * 2,    // lengthFieldLength
- * 1,    // lengthAdjustment
- * 3     // initialBytesToStrip
- * ))
- * .addLast(new ChannelInboundHandlerAdapter() {
- *
- * @Override public void channelRead(ChannelHandlerContext ctx, Object msg) {
- * ByteBuf buf = (ByteBuf) msg;
- * byte marker = buf.readByte(); // HDR2
- * byte[] bytes = new byte[buf.readableBytes()];
- * buf.readBytes(bytes);
- * String content = new String(bytes, StandardCharsets.UTF_8);
- * <p>
- * // 检查内容是否以 "CAFE BABY" 开头
- * if (content.startsWith("CAFE BABY")) {
- * System.out.println("✅ 开头为 CAFE BABY");
- * } else {
- * System.out.println("❌ 开头不是 CAFE BABY");
- * }
- * <p>
- * System.out.println("解码后的字符串: " + content);
- * buf.release();
- * }
- * });
- * <p>
- * // 构造模拟数据包
- * ByteBuf buffer = Unpooled.buffer();
- * buffer.writeByte(0xCA);           // HDR1
- * buffer.writeShort(1 + 11);        // LEN: HDR2 + 内容长度
- * buffer.writeByte(0xFE);           // HDR2
- * buffer.writeBytes("CAFE BABY!".getBytes(StandardCharsets.UTF_8)); // 内容
- * <p>
- * // 写入模拟数据到 pipeline
- * channel.writeInbound(buffer);
- * }
- * }
- */
 public class TestLengthFieldDecoder {
     public static void main(String[] args) {
         EmbeddedChannel channel = new EmbeddedChannel();
@@ -106,7 +48,7 @@ public class TestLengthFieldDecoder {
                         1,    // lengthFieldOffset
                         2,    // lengthFieldLength
                         1,    // lengthAdjustment
-                        3,     // initialBytesToStrip
+                        0,     // initialBytesToStrip
                         true // fastFail
                 ))
                 .addLast(
@@ -114,17 +56,25 @@ public class TestLengthFieldDecoder {
                         {
                             @Override
                             public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+
                                 ByteBuf buf = (ByteBuf) msg;
-                                byte marker = buf.readByte(); // HDR2
+                                byte HDR1 = buf.readByte(); // HDR1
+                                int messageLength = buf.readShort();
+                                byte HDR2 = buf.readByte(); // HDR2
                                 byte[] bytes = new byte[buf.readableBytes()]; //
                                 buf.readBytes(bytes);
                                 String content = new String(bytes, StandardCharsets.UTF_8);
-                                // 检查内容是否以 "CAFE BABY" 开头
-                                if (marker == 0xFE) {
+                                if ((HDR1 & 0xFF) == 0xCA) {
+                                    System.out.println("✅ HDR1 校验正确。");
+                                } else {
+                                    System.out.println("❌");
+                                }
+                                if ((HDR2 & 0xFF) == 0xFE) {
                                     System.out.println("✅ HDR2 校验正确。");
                                 } else {
                                     System.out.println("❌");
                                 }
+                                System.out.println("消息字节长度为：" + messageLength);
                                 System.out.println("解码后的字符串: " + content);
                                 /**
                                  * | 场景                                         | 是否需要手动 `release()`                    |
@@ -139,10 +89,12 @@ public class TestLengthFieldDecoder {
                         }
                 );
         ByteBuf buffer = Unpooled.buffer();
+        byte[] need2send = "HELLO, WORLD".getBytes(StandardCharsets.UTF_8);
+        System.out.println(need2send.length);
         buffer.writeByte(0xCA);           // HDR1
-        buffer.writeShort(10);        // LEN: HDR2 + 内容长度
+        buffer.writeShort(need2send.length);        // LEN: HDR2 + 内容长度
         buffer.writeByte(0xFE);           // HDR2
-        buffer.writeBytes("HELLO, WORLD".getBytes(StandardCharsets.UTF_8)); // 内容
+        buffer.writeBytes(need2send); // 内容
 
         // 写入模拟数据到 pipeline
         channel.writeInbound(buffer);
