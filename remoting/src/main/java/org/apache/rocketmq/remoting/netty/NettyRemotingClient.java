@@ -207,7 +207,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
 
         nettyEventExecutor.start();
-
+        // 简单定时任务 - 扫描一下 需要回复的对象: 初始延迟 3 秒，之后每隔约 1 秒重复执行一次
         TimerTask timerTaskScanResponseTable = new TimerTask() {
             @Override
             public void run(Timeout timeout) {
@@ -220,7 +220,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
             }
         };
-
+        // timer 是 时间轮的方式
         this.timer.newTimeout(timerTaskScanResponseTable, 1000 * 3, TimeUnit.MILLISECONDS);
 
     }
