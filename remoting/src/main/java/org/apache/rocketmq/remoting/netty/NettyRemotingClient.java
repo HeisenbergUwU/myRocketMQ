@@ -66,8 +66,8 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     private final HashedWheelTimer timer = new HashedWheelTimer(r -> new Thread(r, "ClientHouseKeepingService"));
 
     private final AtomicReference<List<String>> namesrvAddrList = new AtomicReference<>();
-    private final ConcurrentMap<String, Boolean> availableNamesrvAddrMap = new ConcurrentHashMap<>();
-    private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<>();
+    private final ConcurrentMap<String, Boolean> availableNamesrvAddrMap = new ConcurrentHashMap<>(); // 可用的 nameSRV
+    private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<>(); // 当前正在使用的 NS
     private final AtomicInteger namesrvIndex = new AtomicInteger(initValueIndex()); // <= 999
     private final Lock namesrvChannelLock = new ReentrantLock(); // namesrv 频道锁
 
@@ -153,6 +153,95 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    // 搜索可用的NS
+    private void scanAvailableNameSrv() {
+        List<String> nameServerList = this.namesrvAddrList.get();
+        if (nameServerList == null) {
+            LOGGER.debug("scanAvailableNameSrv addresses of name server is null!");
+            return;
+        }
+        // 排除非可用的 address
+        for (String address : NettyRemotingClient.this.availableNamesrvAddrMap.keySet()) {
+            if (!nameServerList.contains(address)) { // 判断address 是否作废
+                LOGGER.warn("scanAvailableNameSrv remove invalid address {}", address);
+                NettyRemotingClient.this.availableNamesrvAddrMap.remove(address);
+            }
+        }
+
+        for (final String namesrvAddr : nameServerList) {
+            scanExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    NettyRemotingClient.this.getAnd
+                }
+            });
+        }
+    }
+
+    private ChannelFuture getAndCreateChannelAsync(final String addr) throws InterruptedException {
+        if (null == addr) {
+            return getAndCreateNameserverChannelAsync();
+        }
+
+        ChannelWrapper cw = this.channelTables.get(addr);
+        if (cw != null && cw.isOK()) {
+            return cw.getChannelFuture();
+        }
+
+        return this.createChannelAsync(addr);
+    }
+
+    private Channel getAndCreateChannel(final String addr) throws InterruptedException {
+        ChannelFuture channelFuture = getAndCreateChannelAsync(addr);
+        if (channelFuture == null) {
+            return null;
+        }
+        return channelFuture.awaitUninterruptibly().channel();
+    }
+
+    private ChannelFuture getAndCreateNameserverChannelAsync() throws InterruptedException {
+        String addr = this.namesrvAddrChoosed.get(); // 当前选择的NS
+        if (addr != null) {
+            ChannelWrapper cw = this.channelTables.get(addr);
+            if (cw != null && cw.isOK()) {
+                return cw.getChannelFuture();
+            }
+        }
+        // 首次启动，是NULL
+        final List<String> addrList = this.namesrvAddrList.get();
+        if (this.namesrvChannelLock.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+            try {
+                addr = this.namesrvAddrChoosed.get();
+                if (addr != null) { // 锁定后双判断
+                    ChannelWrapper cw = this.channelTables.get(addr); // addr - ChannelWrapper
+                    if (cw != null && cw.isOK()) {
+                        return cw.getChannelFuture();
+                    }
+                }
+                // namesrvAddrList - 客户端启动时候从配置中读取的NS地址
+                if (addrList != null && !addrList.isEmpty()) {
+                    // 运行到这里也就是说 还没有启动过，知识配置文件中读取了。
+                    int index = this.namesrvIndex.incrementAndGet();
+                    index = Math.abs(index);
+                    index = index % addrList.size(); // 随机选择了一个
+                    String newAddr = addrList.get(index);
+
+                    this.namesrvAddrChoosed.set(newAddr);
+                    LOGGER.info("new name server is chosen. OLD: {} , NEW: {}. namesrvIndex = {}", addr, newAddr, namesrvIndex);
+                    return this.createChannelAsync(newAddr);
+                }
+            } catch (Exception e) {
+                LOGGER.error("getAndCreateNameserverChannel: create name server channel exception", e);
+            } finally {
+                this.namesrvChannelLock.unlock();
+            }
+        }
+        return null;
+    }
+
+
+
+
     @Override
     public void start() {
         if (this.defaultEventExecutorGroup == null) {
@@ -223,6 +312,22 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         // timer 是 时间轮的方式
         this.timer.newTimeout(timerTaskScanResponseTable, 1000 * 3, TimeUnit.MILLISECONDS);
 
+        if (nettyClientConfig.isScanAvailableNameSrv()) {
+            int connectTimeoutMillis = this.nettyClientConfig.getConnectTimeoutMillis();
+            TimerTask timerTaskScanAvailableNameSrv = new TimerTask() {
+                @Override
+                public void run(Timeout timeout) {
+                    try {
+                        NettyRemotingClient.this.scanAvailableNameSrv();
+                    } catch (Exception e) {
+                        LOGGER.error("scanAvailableNameSrv exception", e);
+                    } finally {
+                        timer.newTimeout(this, connectTimeoutMillis, TimeUnit.MILLISECONDS);
+                    }
+                }
+            };
+            this.timer.newTimeout(timerTaskScanAvailableNameSrv, 0, TimeUnit.MILLISECONDS);
+        }
     }
 
 
@@ -296,7 +401,18 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         String[] hostAndPort = getHostAndPort(addr);
         String host = hostAndPort[0];
         int port = Integer.parseInt(hostAndPort[1]);
-        return fetchBootstrap(addr).connect(host, port);
+        /**
+         * Channel 是先被 new 出来的（比如 NioSocketChannel）；
+         *
+         * 绑定到 EventLoop，初始化好 Pipeline；
+         *
+         * 然后调用 channel.connect(remoteAddr)；
+         *
+         * 返回的 ChannelFuture 持有这个 Channel 引用；
+         *
+         * 所以你可以立即拿到这个 Channel 对象，但它可能还处于 isActive() == false 的状态。
+         */
+        return fetchBootstrap(addr).connect(host, port); // bootstrap 对象  connect ...
     }
 
     private Bootstrap fetchBootstrap(String addr) {
@@ -559,7 +675,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         private ChannelFuture channelFuture;
         // only affected by sync or async request, oneway is not included.
         private ChannelFuture channelToClose;
-        private long lastResponseTime;
+        private long lastResponseTime; // 上一次的应答时间戳
         private final String channelAddress;
 
         public ChannelWrapper(String address, ChannelFuture channelFuture) {
@@ -578,6 +694,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             return getChannel().isWritable();
         }
 
+        // 判断包装对象 是否包装了入参的 channel
         public boolean isWrapperOf(Channel channel) {
             return this.channelFuture.channel() != null && this.channelFuture.channel() == channel;
         }
@@ -614,7 +731,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 LOGGER.warn("channelWrapper has reconnect, so do nothing, now channelId={}, input channelId={}", getChannel().id(), channel.id());
                 return false;
             }
-            // try lock , 如果进不去就不能执行了
+            // try lock , 如果进不去就不能执行了 -- 双重判断，外面无锁判断 内部有锁判断，Double Check
             if (lock.writeLock().tryLock()) {
                 try {
                     if (isWrapperOf(channel)) {
