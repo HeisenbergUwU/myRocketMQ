@@ -239,7 +239,13 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return null;
     }
 
+    private ChannelFuture createChannelAsync(final String addr) throws InterruptedException {
+        ChannelWrapper cw = this.channelTables.get(addr);
+        if(cw != null && cw.isOK())
+        {
 
+        }
+    }
 
 
     @Override
@@ -685,7 +691,10 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             this.channelAddress = address;
         }
 
-
+        /**
+         * 判断channel是否为可用状态
+         * @return
+         */
         public boolean isOK() {
             return getChannel() != null && getChannel().isActive();
         }
