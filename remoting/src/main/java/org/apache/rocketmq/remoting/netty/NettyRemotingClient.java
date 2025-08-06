@@ -236,17 +236,46 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 this.namesrvChannelLock.unlock();
             }
         }
-        return null;
+        return null; // 是会得到空的 ChannelFuture 对象的
     }
 
     private ChannelFuture createChannelAsync(final String addr) throws InterruptedException {
         ChannelWrapper cw = this.channelTables.get(addr);
-        if(cw != null && cw.isOK())
-        {
-
+        if (cw != null && cw.isOK()) {
+            return cw.getChannelFuture();
         }
+
+        if (this.lockChannelTables.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+            try {
+                cw = this.channelTables.get(addr); // 同样的锁定后判断
+                if (cw != null) {
+                    // channelFuture 是 isActive 状态 或者 链接尚未完成
+                    if (cw.isOK() || !cw.getChannelFuture().isDone()) {
+                        return cw.getChannelFuture();
+                    } else {
+                        // 这时候旧的 ChannelWrapper 没意义了；
+                        this.channelTables.remove(addr);
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.error("createChannel: create channel exception", e);
+            } finally {
+                this.lockChannelTables.unlock();
+            }
+        } else {
+            LOGGER.warn("createChannel: try to lock channel table, but timeout, {}ms", LOCK_TIMEOUT_MILLIS);
+        }
+        return null;
     }
 
+    /**
+     * 创建一个 ChannelWrapper
+     * @param addr
+     * @return
+     */
+    private ChannelWrapper createChannel(String addr) {
+        ChannelFuture channelFuture = doConnect(addr);
+    }
 
     @Override
     public void start() {
@@ -693,6 +722,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
         /**
          * 判断channel是否为可用状态
+         *
          * @return
          */
         public boolean isOK() {
