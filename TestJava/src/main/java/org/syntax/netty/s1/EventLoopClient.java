@@ -5,6 +5,7 @@ import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.string.StringEncoder;
+import io.netty.handler.logging.LoggingHandler;
 
 import java.net.InetSocketAddress;
 
@@ -25,13 +26,15 @@ public class EventLoopClient {
         new Bootstrap()
                 .group(eventExecutors)
                 .channel(NioSocketChannel.class)
+                .handler(new LoggingHandler())
                 .handler(new ChannelInitializer<SocketChannel>() {
 
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
                         ch.pipeline().addLast(new StringEncoder());
                     }
-                }).connect(new InetSocketAddress("localhost", 8080))
+                })
+                .connect(new InetSocketAddress("localhost", 8080))
                 .sync()
                 .channel()
                 .writeAndFlush("hello world")

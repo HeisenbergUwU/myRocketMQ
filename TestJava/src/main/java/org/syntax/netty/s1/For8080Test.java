@@ -1,11 +1,13 @@
 package org.syntax.netty.s1;
 
 import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.string.StringEncoder;
+import io.netty.handler.logging.LoggingHandler;
 
 import java.net.InetSocketAddress;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -27,7 +29,7 @@ public class For8080Test {
                             protected void initChannel(SocketChannel ch) throws Exception {
                                 ch.pipeline().addLast(new StringEncoder());
                             }
-                        }).connect(new InetSocketAddress("localhost", 8080))
+                        }).handler(new LoggingHandler()).connect(new InetSocketAddress("localhost", 8080))
                         .sync()
                         .channel()
                         .writeAndFlush("hello world")
