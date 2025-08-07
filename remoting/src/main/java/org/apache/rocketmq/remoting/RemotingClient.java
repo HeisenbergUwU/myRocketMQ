@@ -15,35 +15,24 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 
 public interface RemotingClient extends RemotingService {
+
     void updateNameServerAddressList(final List<String> addrs);
 
     List<String> getNameServerAddressList();
 
     List<String> getAvailableNameSrvList();
 
-    RemotingCommand invokeSync(final String addr, final RemotingCommand request, final long timeoutMillis, final InvokeCallback invokeCallback) throws InterruptedException, RemotingConnectException,
-            RemotingSendRequestException, RemotingTimeoutException;
+    RemotingCommand invokeSync(final String addr, final RemotingCommand request, final long timeoutMillis) throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException;
 
-    void invokeOneway(final String addr, final RemotingCommand request, final long timeoutMillis)
-            throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException,
-            RemotingTimeoutException, RemotingSendRequestException;
+    void invokeAsync(final String addr, final RemotingCommand request, final long timeoutMillis, final InvokeCallback invokeCallback) throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException;
 
-    void registerProcessor(final int requestCode, final NettyRequestProcessor processor,
-                           final ExecutorService executor);
+    void invokeOneway(final String addr, final RemotingCommand request, final long timeoutMillis) throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException;
 
-    void setCallbackExecutor(final ExecutorService callbackExecutor);
-
-    boolean isChannelWritable(final String addr);
-
-    boolean isAddressReachable(final String addr);
-
-    void closeChannels(final List<String> addrList);
-
-    // 默认的 异步唤醒
     default CompletableFuture<RemotingCommand> invoke(final String addr, final RemotingCommand request, final long timeoutMillis) {
         CompletableFuture<RemotingCommand> future = new CompletableFuture<>();
         try {
-            invokeSync(addr, request, timeoutMillis, new InvokeCallback() {
+            invokeAsync(addr, request, timeoutMillis, new InvokeCallback() {
+
                 @Override
                 public void operationComplete(ResponseFuture responseFuture) {
 
@@ -64,4 +53,14 @@ public interface RemotingClient extends RemotingService {
         }
         return future;
     }
+
+    void registerProcessor(final int requestCode, final NettyRequestProcessor processor, final ExecutorService executor);
+
+    void setCallbackExecutor(final ExecutorService callbackExecutor);
+
+    boolean isChannelWritable(final String addr);
+
+    boolean isAddressReachable(final String addr);
+
+    void closeChannels(final List<String> addrList);
 }
