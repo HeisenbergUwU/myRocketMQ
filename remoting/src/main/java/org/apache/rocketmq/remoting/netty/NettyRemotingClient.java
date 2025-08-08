@@ -410,7 +410,8 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     /**
      * 关闭 Channel
-     * @param addr - 通道地址
+     *
+     * @param addr    - 通道地址
      * @param channel - 通道对象
      */
     public void closeChannel(final String addr, final Channel channel) {
@@ -432,8 +433,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                         LOGGER.info("closeChannel: the channel[addr={}, id={}] has been removed from the channel table before", addrRemote, channel.id());
                         removeItemFromTable = false;
                     } else if (prevCW.isWrapperOf(channel)) {
-                        LOGGER.info("closeChannel: the channel[addr={}, id={}] has been closed before, and has been created again, nothing to do.",
-                                addrRemote, channel.id());
+                        LOGGER.info("closeChannel: the channel[addr={}, id={}] has been closed before, and has been created again, nothing to do.", addrRemote, channel.id());
                         removeItemFromTable = false;
                     }
 
@@ -458,6 +458,105 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             LOGGER.error("closeChannel exception", e);
         }
     }
+
+    /**
+     * 关闭 Channel 逻辑
+     *
+     * @param channel - 通道对象
+     */
+    public void closeChannel(final Channel channel) {
+        if (null == channel) {
+            return;
+        }
+        try {
+            if (this.lockChannelTables.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) { // 锁定ChannelTables
+                try {
+                    boolean removeItemFromTable = true;
+                    ChannelWrapper prevCW = null;
+                    String addrRemote = null;
+                    // 在 Map 中搜索 channel 所对应的 ChannelWrapper
+                    for (Map.Entry<String, ChannelWrapper> entry : channelTables.entrySet()) {
+                        String key = entry.getKey();
+                        ChannelWrapper prev = entry.getValue();
+                        if (prev.isWrapperOf(channel)) {
+                            prevCW = prev;
+                            addrRemote = key;
+                            break;
+                        }
+                    }
+                    // 没找到
+                    if (null == prevCW) {
+                        LOGGER.info("eventCloseChannel: the channel[addr={}, id={}] has been removed from the channel table before", RemotingHelper.parseChannelRemoteAddr(channel), channel.id());
+                        removeItemFromTable = false;
+                    }
+                    // 找到的逻辑
+                    if (removeItemFromTable) {
+                        // 删除 channelWrapperTables 和 channelTables 中的 对象
+                        ChannelWrapper channelWrapper = this.channelWrapperTables.remove(channel);
+                        if (channelWrapper != null && channelWrapper.tryClose(channel)) {
+                            this.channelTables.remove(addrRemote);
+                        }
+                        LOGGER.info("closeChannel: the channel[addr={}, id={}] was removed from channel table", addrRemote, channel.id());
+                        RemotingHelper.closeChannel(channel);
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("closeChannel: close the channel[id={}] exception", channel.id(), e);
+                } finally {
+                    this.lockChannelTables.unlock();
+                }
+            } else {
+                LOGGER.warn("closeChannel: try to lock channel table, but timeout, {}ms", LOCK_TIMEOUT_MILLIS);
+            }
+        } catch (InterruptedException e) {
+            LOGGER.error("closeChannel exception", e);
+        }
+    }
+
+    /**
+     * 更新 NS 的地址列表
+     *
+     * @param addrs - 地址列表
+     */
+    @Override
+    public void updateNameServerAddressList(List<String> addrs) {
+        List<String> old = this.namesrvAddrList.get();
+        boolean update = false;
+        // 先看看 是不是需要更新呢.....
+        if (!addrs.isEmpty()) {
+            if (null == old) {
+                update = true;
+            } else if (addrs.size() != old.size()) {
+                update = true;
+            } else {
+                for (String addr : addrs) {
+                    if (!old.contains(addr)) {
+                        update = true;
+                        break;
+                    }
+                }
+            }
+            if (update) {
+                Collections.shuffle(addrs);
+                LOGGER.info("name server address updated. NEW : {} , OLD: {}", addrs, old);
+                this.namesrvAddrList.set(addrs);
+
+                // should close the channel if choosed addr is not exist.
+                String chosenNameServerAddr = this.namesrvAddrChoosed.get();
+                if (chosenNameServerAddr != null && !addrs.contains(chosenNameServerAddr)) {
+                    namesrvAddrChoosed.compareAndSet(chosenNameServerAddr, null);
+                    for (String addr : this.channelTables.keySet()) {
+                        if (addr.contains(chosenNameServerAddr)) {
+                            ChannelWrapper channelWrapper = this.channelTables.get(addr);
+                            if (channelWrapper != null) {
+                                channelWrapper.close();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // EMOJI CURSOR ❎
 
     /**
@@ -613,11 +712,6 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
 
     @Override
-    public void updateNameServerAddressList(List<String> addrs) {
-
-    }
-
-    @Override
     public List<String> getNameServerAddressList() {
         return Collections.emptyList();
     }
@@ -703,58 +797,6 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return fetchBootstrap(addr).connect(host, port); // bootstrap 对象  connect ...
     }
 
-    /**
-     * 关闭
-     *
-     * @param channel
-     */
-    public void closeChannel(final Channel channel) {
-        if (null == channel) {
-            return;
-        }
-        try {
-            if (this.lockChannelTables.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) { // 锁定ChannelTables
-                try {
-                    boolean removeItemFromTable = true;
-                    ChannelWrapper prevCW = null;
-                    String addrRemote = null;
-                    // 在 Map 中搜索 channel 所对应的 ChannelWrapper
-                    for (Map.Entry<String, ChannelWrapper> entry : channelTables.entrySet()) {
-                        String key = entry.getKey();
-                        ChannelWrapper prev = entry.getValue();
-                        if (prev.isWrapperOf(channel)) {
-                            prevCW = prev;
-                            addrRemote = key;
-                            break;
-                        }
-                    }
-                    // 没找到
-                    if (null == prevCW) {
-                        LOGGER.info("eventCloseChannel: the channel[addr={}, id={}] has been removed from the channel table before", RemotingHelper.parseChannelRemoteAddr(channel), channel.id());
-                        removeItemFromTable = false;
-                    }
-                    // 找到的逻辑
-                    if (removeItemFromTable) {
-                        // 删除 channelWrapperTables 和 channelTables 中的 对象
-                        ChannelWrapper channelWrapper = this.channelWrapperTables.remove(channel);
-                        if (channelWrapper != null && channelWrapper.tryClose(channel)) {
-                            this.channelTables.remove(addrRemote);
-                        }
-                        LOGGER.info("closeChannel: the channel[addr={}, id={}] was removed from channel table", addrRemote, channel.id());
-                        RemotingHelper.closeChannel(channel);
-                    }
-                } catch (Exception e) {
-                    LOGGER.error("closeChannel: close the channel[id={}] exception", channel.id(), e);
-                } finally {
-                    this.lockChannelTables.unlock();
-                }
-            } else {
-                LOGGER.warn("closeChannel: try to lock channel table, but timeout, {}ms", LOCK_TIMEOUT_MILLIS);
-            }
-        } catch (InterruptedException e) {
-            LOGGER.error("closeChannel exception", e);
-        }
-    }
 
     private void updateChannelLastResponseTime(final String addr) {
         String address = addr;
