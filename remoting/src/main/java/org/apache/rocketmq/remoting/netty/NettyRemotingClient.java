@@ -557,506 +557,522 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
-    // EMOJI CURSOR ❎
+    @Override
+    public RemotingCommand invokeSync(String addr, RemotingCommand request, long timeoutMillis) throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
+        long beginStartTime = System.currentTimeMillis();
+        final Channel channel = this.getAndCreateChannel(addr);
+        String channelRemoteAddr = RemotingHelper.parseChannelRemoteAddr(channel);
+        if (channel != null && channel.isActive()) {
+            long left = timeoutMillis;
+            try {
 
-    /**
-     * 搜索可用的 NS 地址 - ✅
-     */
-    private void scanAvailableNameSrv() {
-        List<String> nameServerList = this.namesrvAddrList.get();
-        if (nameServerList == null) {
-            LOGGER.debug("scanAvailableNameSrv addresses of name server is null!");
-            return;
-        }
-        // 排除非可用的 address
-        for (String address : NettyRemotingClient.this.availableNamesrvAddrMap.keySet()) {
-            if (!nameServerList.contains(address)) { // 判断address 是否作废，nameServerList 是配置文件中读取到的，如果有其他的那必然是有点儿问题的
-                LOGGER.warn("scanAvailableNameSrv remove invalid address {}", address);
-                NettyRemotingClient.this.availableNamesrvAddrMap.remove(address);
+            } catch (RemotingSendRequestException e) { // 发送异常
+                LOGGER.warn("invokeSync: send request exception, so close the channel[addr={}, id={}]", channelRemoteAddr, channel.id());
+                this.closeChannel(addr, channel); // 关闭这个channel
+                throw e;
             }
-        }
-
-        for (final String namesrvAddr : nameServerList) {
-            scanExecutor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        Channel channel = NettyRemotingClient.this.getAndCreateChannel(namesrvAddr);
-                        if (channel != null) {
-                            NettyRemotingClient.this.availableNamesrvAddrMap.putIfAbsent(namesrvAddr, true);
-                        } else {
-                            Boolean value = NettyRemotingClient.this.availableNamesrvAddrMap.remove(namesrvAddr);
-                            if (value != null) {
-                                LOGGER.warn("scanAvailableNameSrv remove unconnected address {}", namesrvAddr);
-                            }
-                        }
-                    } catch (Exception e) {
-                        LOGGER.error("scanAvailableNameSrv get channel of {} failed, ", namesrvAddr, e);
-                    }
-                }
-            });
-        }
-    }
-
-
-    protected void scanChannelTablesOfNameServer() {
-        List<String> nameServerList = this.namesrvAddrList.get(); // 因为是 AtomicReference
-        if (nameServerList == null) {
-            LOGGER.warn("[SCAN] Addresses of name server is empty!");
-            return;
-        }
-        //  ConcurrentMap<String, NettyRemotingClient.ChannelWrapper>
-        for (Map.Entry<String, ChannelWrapper> entry : this.channelTables.entrySet()) {
-            String addr = entry.getKey();
-            ChannelWrapper channelWrapper = entry.getValue();
-            if (channelWrapper == null) {
-                continue;
-            }
-
-            if ((System.currentTimeMillis() - channelWrapper.getLastResponseTime()) > this.nettyClientConfig.getChannelNotActiveInterval()) {
-                LOGGER.warn("[SCAN] No response after {} from name server {}, so close it!", channelWrapper.getLastResponseTime(), addr);
-                closeChannel(addr, channelWrapper.getChannel());
-            }
-        }
-    }
-
-    private ChannelFuture getAndCreateChannelAsync(final String addr) throws InterruptedException {
-        if (null == addr) {
-            return getAndCreateNameserverChannelAsync();
-        }
-
-        ChannelWrapper cw = this.channelTables.get(addr);
-        if (cw != null && cw.isOK()) {
-            return cw.getChannelFuture();
-        }
-
-        return this.createChannelAsync(addr);
-    }
-
-    private Channel getAndCreateChannel(final String addr) throws InterruptedException {
-        ChannelFuture channelFuture = getAndCreateChannelAsync(addr);
-        if (channelFuture == null) {
             return null;
         }
-        return channelFuture.awaitUninterruptibly().channel();
-    }
+        // EMOJI CURSOR ❎
 
-    private ChannelFuture getAndCreateNameserverChannelAsync() throws InterruptedException {
-        String addr = this.namesrvAddrChoosed.get(); // 当前选择的NS
-        if (addr != null) {
+        /**
+         * 搜索可用的 NS 地址 - ✅
+         */
+        private void scanAvailableNameSrv () {
+            List<String> nameServerList = this.namesrvAddrList.get();
+            if (nameServerList == null) {
+                LOGGER.debug("scanAvailableNameSrv addresses of name server is null!");
+                return;
+            }
+            // 排除非可用的 address
+            for (String address : NettyRemotingClient.this.availableNamesrvAddrMap.keySet()) {
+                if (!nameServerList.contains(address)) { // 判断address 是否作废，nameServerList 是配置文件中读取到的，如果有其他的那必然是有点儿问题的
+                    LOGGER.warn("scanAvailableNameSrv remove invalid address {}", address);
+                    NettyRemotingClient.this.availableNamesrvAddrMap.remove(address);
+                }
+            }
+
+            for (final String namesrvAddr : nameServerList) {
+                scanExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Channel channel = NettyRemotingClient.this.getAndCreateChannel(namesrvAddr);
+                            if (channel != null) {
+                                NettyRemotingClient.this.availableNamesrvAddrMap.putIfAbsent(namesrvAddr, true);
+                            } else {
+                                Boolean value = NettyRemotingClient.this.availableNamesrvAddrMap.remove(namesrvAddr);
+                                if (value != null) {
+                                    LOGGER.warn("scanAvailableNameSrv remove unconnected address {}", namesrvAddr);
+                                }
+                            }
+                        } catch (Exception e) {
+                            LOGGER.error("scanAvailableNameSrv get channel of {} failed, ", namesrvAddr, e);
+                        }
+                    }
+                });
+            }
+        }
+
+
+        protected void scanChannelTablesOfNameServer () {
+            List<String> nameServerList = this.namesrvAddrList.get(); // 因为是 AtomicReference
+            if (nameServerList == null) {
+                LOGGER.warn("[SCAN] Addresses of name server is empty!");
+                return;
+            }
+            //  ConcurrentMap<String, NettyRemotingClient.ChannelWrapper>
+            for (Map.Entry<String, ChannelWrapper> entry : this.channelTables.entrySet()) {
+                String addr = entry.getKey();
+                ChannelWrapper channelWrapper = entry.getValue();
+                if (channelWrapper == null) {
+                    continue;
+                }
+
+                if ((System.currentTimeMillis() - channelWrapper.getLastResponseTime()) > this.nettyClientConfig.getChannelNotActiveInterval()) {
+                    LOGGER.warn("[SCAN] No response after {} from name server {}, so close it!", channelWrapper.getLastResponseTime(), addr);
+                    closeChannel(addr, channelWrapper.getChannel());
+                }
+            }
+        }
+
+        private ChannelFuture getAndCreateChannelAsync ( final String addr) throws InterruptedException {
+            if (null == addr) {
+                return getAndCreateNameserverChannelAsync();
+            }
+
             ChannelWrapper cw = this.channelTables.get(addr);
             if (cw != null && cw.isOK()) {
                 return cw.getChannelFuture();
             }
+
+            return this.createChannelAsync(addr);
         }
-        // 首次启动，是NULL
-        final List<String> addrList = this.namesrvAddrList.get();
-        if (this.namesrvChannelLock.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
-            try {
-                addr = this.namesrvAddrChoosed.get();
-                if (addr != null) { // 锁定后双判断
-                    ChannelWrapper cw = this.channelTables.get(addr); // addr - ChannelWrapper
-                    if (cw != null && cw.isOK()) {
-                        return cw.getChannelFuture();
+
+        private Channel getAndCreateChannel ( final String addr) throws InterruptedException {
+            ChannelFuture channelFuture = getAndCreateChannelAsync(addr);
+            if (channelFuture == null) {
+                return null;
+            }
+            return channelFuture.awaitUninterruptibly().channel();
+        }
+
+        private ChannelFuture getAndCreateNameserverChannelAsync () throws InterruptedException {
+            String addr = this.namesrvAddrChoosed.get(); // 当前选择的NS
+            if (addr != null) {
+                ChannelWrapper cw = this.channelTables.get(addr);
+                if (cw != null && cw.isOK()) {
+                    return cw.getChannelFuture();
+                }
+            }
+            // 首次启动，是NULL
+            final List<String> addrList = this.namesrvAddrList.get();
+            if (this.namesrvChannelLock.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+                try {
+                    addr = this.namesrvAddrChoosed.get();
+                    if (addr != null) { // 锁定后双判断
+                        ChannelWrapper cw = this.channelTables.get(addr); // addr - ChannelWrapper
+                        if (cw != null && cw.isOK()) {
+                            return cw.getChannelFuture();
+                        }
                     }
-                }
-                // namesrvAddrList - 客户端启动时候从配置中读取的NS地址
-                if (addrList != null && !addrList.isEmpty()) {
-                    // 运行到这里也就是说 还没有启动过，知识配置文件中读取了。
-                    int index = this.namesrvIndex.incrementAndGet();
-                    index = Math.abs(index);
-                    index = index % addrList.size(); // 随机选择了一个
-                    String newAddr = addrList.get(index);
+                    // namesrvAddrList - 客户端启动时候从配置中读取的NS地址
+                    if (addrList != null && !addrList.isEmpty()) {
+                        // 运行到这里也就是说 还没有启动过，知识配置文件中读取了。
+                        int index = this.namesrvIndex.incrementAndGet();
+                        index = Math.abs(index);
+                        index = index % addrList.size(); // 随机选择了一个
+                        String newAddr = addrList.get(index);
 
-                    this.namesrvAddrChoosed.set(newAddr);
-                    LOGGER.info("new name server is chosen. OLD: {} , NEW: {}. namesrvIndex = {}", addr, newAddr, namesrvIndex);
-                    return this.createChannelAsync(newAddr);
-                }
-            } catch (Exception e) {
-                LOGGER.error("getAndCreateNameserverChannel: create name server channel exception", e);
-            } finally {
-                this.namesrvChannelLock.unlock();
-            }
-        }
-        return null; // 是会得到空的 ChannelFuture 对象的
-    }
-
-    private ChannelFuture createChannelAsync(final String addr) throws InterruptedException {
-        ChannelWrapper cw = this.channelTables.get(addr);
-        if (cw != null && cw.isOK()) {
-            return cw.getChannelFuture();
-        }
-
-        if (this.lockChannelTables.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
-            try {
-                cw = this.channelTables.get(addr); // 同样的锁定后判断
-                if (cw != null) {
-                    // channelFuture 是 isActive 状态 或者 链接尚未完成
-                    if (cw.isOK() || !cw.getChannelFuture().isDone()) {
-                        return cw.getChannelFuture();
-                    } else {
-                        // 这时候旧的 ChannelWrapper 没意义了；
-                        this.channelTables.remove(addr);
+                        this.namesrvAddrChoosed.set(newAddr);
+                        LOGGER.info("new name server is chosen. OLD: {} , NEW: {}. namesrvIndex = {}", addr, newAddr, namesrvIndex);
+                        return this.createChannelAsync(newAddr);
                     }
+                } catch (Exception e) {
+                    LOGGER.error("getAndCreateNameserverChannel: create name server channel exception", e);
+                } finally {
+                    this.namesrvChannelLock.unlock();
                 }
-            } catch (Exception e) {
-                LOGGER.error("createChannel: create channel exception", e);
-            } finally {
-                this.lockChannelTables.unlock();
             }
-        } else {
-            LOGGER.warn("createChannel: try to lock channel table, but timeout, {}ms", LOCK_TIMEOUT_MILLIS);
-        }
-        return null;
-    }
-
-
-    @Override
-    public List<String> getNameServerAddressList() {
-        return Collections.emptyList();
-    }
-
-    @Override
-    public List<String> getAvailableNameSrvList() {
-        return Collections.emptyList();
-    }
-
-    @Override
-    public RemotingCommand invokeSync(String addr, RemotingCommand request, long timeoutMillis) throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
-        return null;
-    }
-
-    @Override
-    public void invokeAsync(String addr, RemotingCommand request, long timeoutMillis, InvokeCallback invokeCallback) throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
-
-    }
-
-
-    @Override
-    public void invokeOneway(String addr, RemotingCommand request, long timeoutMillis) throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
-
-    }
-
-    @Override
-    public CompletableFuture<RemotingCommand> invoke(String addr, RemotingCommand request, long timeoutMillis) {
-        return RemotingClient.super.invoke(addr, request, timeoutMillis);
-    }
-
-    @Override
-    public void registerProcessor(int requestCode, NettyRequestProcessor processor, ExecutorService executor) {
-
-    }
-
-    @Override
-    public void setCallbackExecutor(ExecutorService callbackExecutor) {
-
-    }
-
-    @Override
-    public boolean isChannelWritable(String addr) {
-        return false;
-    }
-
-    @Override
-    public boolean isAddressReachable(String addr) {
-        return false;
-    }
-
-    @Override
-    public void closeChannels(List<String> addrList) {
-
-    }
-
-
-    @Override
-    public ChannelEventListener getChannelEventListener() {
-        return null;
-    }
-
-    @Override
-    public ExecutorService getCallbackExecutor() {
-        return null;
-    }
-
-
-    protected ChannelFuture doConnect(String addr) {
-        String[] hostAndPort = getHostAndPort(addr);
-        String host = hostAndPort[0];
-        int port = Integer.parseInt(hostAndPort[1]);
-        /**
-         * Channel 是先被 new 出来的（比如 NioSocketChannel）；
-         *
-         * 绑定到 EventLoop，初始化好 Pipeline；
-         *
-         * 然后调用 channel.connect(remoteAddr)；
-         *
-         * 返回的 ChannelFuture 持有这个 Channel 引用；
-         *
-         * 所以你可以立即拿到这个 Channel 对象，但它可能还处于 isActive() == false 的状态。
-         */
-        return fetchBootstrap(addr).connect(host, port); // bootstrap 对象  connect ...
-    }
-
-
-    private void updateChannelLastResponseTime(final String addr) {
-        String address = addr;
-        if (address == null) {
-            address = this.namesrvAddrChoosed.get();
-        }
-        if (address == null) {
-            LOGGER.warn("[updateChannelLastResponseTime] could not find address!!");
-            return;
-        }
-        ChannelWrapper channelWrapper = this.channelTables.get(address);
-        if (channelWrapper != null && channelWrapper.isOK()) {
-            channelWrapper.updateLastResponseTime(); // channelWrapper 中的时间。
-        }
-    }
-
-    /**
-     * Channel 对象是一次性的，如果发生关闭、写超时、Idle超时都会断开连接，需要重新进行连接
-     */
-    class ChannelWrapper {
-        private final ReentrantReadWriteLock lock; // 读锁
-        private ChannelFuture channelFuture;
-        // only affected by sync or async request, oneway is not included.
-        private ChannelFuture channelToClose;
-        private long lastResponseTime; // 上一次的应答时间戳
-        private final String channelAddress;
-
-        public ChannelWrapper(String address, ChannelFuture channelFuture) {
-            this.lock = new ReentrantReadWriteLock();
-            this.channelFuture = channelFuture;
-            this.lastResponseTime = System.currentTimeMillis();
-            this.channelAddress = address;
+            return null; // 是会得到空的 ChannelFuture 对象的
         }
 
-        /**
-         * 判断channel是否为可用状态
-         *
-         * @return
-         */
-        public boolean isOK() {
-            return getChannel() != null && getChannel().isActive();
+        private ChannelFuture createChannelAsync ( final String addr) throws InterruptedException {
+            ChannelWrapper cw = this.channelTables.get(addr);
+            if (cw != null && cw.isOK()) {
+                return cw.getChannelFuture();
+            }
+
+            if (this.lockChannelTables.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+                try {
+                    cw = this.channelTables.get(addr); // 同样的锁定后判断
+                    if (cw != null) {
+                        // channelFuture 是 isActive 状态 或者 链接尚未完成
+                        if (cw.isOK() || !cw.getChannelFuture().isDone()) {
+                            return cw.getChannelFuture();
+                        } else {
+                            // 这时候旧的 ChannelWrapper 没意义了；
+                            this.channelTables.remove(addr);
+                        }
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("createChannel: create channel exception", e);
+                } finally {
+                    this.lockChannelTables.unlock();
+                }
+            } else {
+                LOGGER.warn("createChannel: try to lock channel table, but timeout, {}ms", LOCK_TIMEOUT_MILLIS);
+            }
+            return null;
         }
 
-        public boolean isWritable() {
-            return getChannel().isWritable();
+
+        @Override
+        public List<String> getNameServerAddressList () {
+            return Collections.emptyList();
         }
 
-        // 判断包装对象 是否包装了入参的 channel
-        public boolean isWrapperOf(Channel channel) {
-            return this.channelFuture.channel() != null && this.channelFuture.channel() == channel;
+        @Override
+        public List<String> getAvailableNameSrvList () {
+            return Collections.emptyList();
         }
 
-        private Channel getChannel() {
-            return getChannelFuture().channel();
+
+        @Override
+        public void invokeAsync (String addr, RemotingCommand request,long timeoutMillis, InvokeCallback invokeCallback) throws
+        InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException
+        {
+
         }
 
-        public ChannelFuture getChannelFuture() {
-            // 在读锁上进行读取
-            lock.readLock().lock();
-            try {
-                return this.channelFuture;
-            } finally {
-                lock.readLock().unlock();
+
+        @Override
+        public void invokeOneway (String addr, RemotingCommand request,long timeoutMillis) throws
+        InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException
+        {
+
+        }
+
+        @Override
+        public CompletableFuture<RemotingCommand> invoke (String addr, RemotingCommand request,long timeoutMillis){
+            return RemotingClient.super.invoke(addr, request, timeoutMillis);
+        }
+
+        @Override
+        public void registerProcessor ( int requestCode, NettyRequestProcessor processor, ExecutorService executor){
+
+        }
+
+        @Override
+        public void setCallbackExecutor (ExecutorService callbackExecutor){
+
+        }
+
+        @Override
+        public boolean isChannelWritable (String addr){
+            return false;
+        }
+
+        @Override
+        public boolean isAddressReachable (String addr){
+            return false;
+        }
+
+        @Override
+        public void closeChannels (List < String > addrList) {
+
+        }
+
+
+        @Override
+        public ChannelEventListener getChannelEventListener () {
+            return null;
+        }
+
+        @Override
+        public ExecutorService getCallbackExecutor () {
+            return null;
+        }
+
+
+        protected ChannelFuture doConnect (String addr){
+            String[] hostAndPort = getHostAndPort(addr);
+            String host = hostAndPort[0];
+            int port = Integer.parseInt(hostAndPort[1]);
+            /**
+             * Channel 是先被 new 出来的（比如 NioSocketChannel）；
+             *
+             * 绑定到 EventLoop，初始化好 Pipeline；
+             *
+             * 然后调用 channel.connect(remoteAddr)；
+             *
+             * 返回的 ChannelFuture 持有这个 Channel 引用；
+             *
+             * 所以你可以立即拿到这个 Channel 对象，但它可能还处于 isActive() == false 的状态。
+             */
+            return fetchBootstrap(addr).connect(host, port); // bootstrap 对象  connect ...
+        }
+
+
+        private void updateChannelLastResponseTime ( final String addr){
+            String address = addr;
+            if (address == null) {
+                address = this.namesrvAddrChoosed.get();
+            }
+            if (address == null) {
+                LOGGER.warn("[updateChannelLastResponseTime] could not find address!!");
+                return;
+            }
+            ChannelWrapper channelWrapper = this.channelTables.get(address);
+            if (channelWrapper != null && channelWrapper.isOK()) {
+                channelWrapper.updateLastResponseTime(); // channelWrapper 中的时间。
             }
         }
 
-        public long getLastResponseTime() {
-            return this.lastResponseTime;
-        }
+        /**
+         * Channel 对象是一次性的，如果发生关闭、写超时、Idle超时都会断开连接，需要重新进行连接
+         */
+        class ChannelWrapper {
+            private final ReentrantReadWriteLock lock; // 读锁
+            private ChannelFuture channelFuture;
+            // only affected by sync or async request, oneway is not included.
+            private ChannelFuture channelToClose;
+            private long lastResponseTime; // 上一次的应答时间戳
+            private final String channelAddress;
 
-        public void updateLastResponseTime() {
-            this.lastResponseTime = System.currentTimeMillis();
-        }
+            public ChannelWrapper(String address, ChannelFuture channelFuture) {
+                this.lock = new ReentrantReadWriteLock();
+                this.channelFuture = channelFuture;
+                this.lastResponseTime = System.currentTimeMillis();
+                this.channelAddress = address;
+            }
 
-        public String getChannelAddress() {
-            return channelAddress;
-        }
+            /**
+             * 判断channel是否为可用状态
+             *
+             * @return
+             */
+            public boolean isOK() {
+                return getChannel() != null && getChannel().isActive();
+            }
 
-        public boolean reconnect(final Channel channel) {
-            // 该 wrapper 已经不是 channel 的包装了， 说明已经重新连接了
-            if (!isWrapperOf(channel)) {
-                LOGGER.warn("channelWrapper has reconnect, so do nothing, now channelId={}, input channelId={}", getChannel().id(), channel.id());
+            public boolean isWritable() {
+                return getChannel().isWritable();
+            }
+
+            // 判断包装对象 是否包装了入参的 channel
+            public boolean isWrapperOf(Channel channel) {
+                return this.channelFuture.channel() != null && this.channelFuture.channel() == channel;
+            }
+
+            private Channel getChannel() {
+                return getChannelFuture().channel();
+            }
+
+            public ChannelFuture getChannelFuture() {
+                // 在读锁上进行读取
+                lock.readLock().lock();
+                try {
+                    return this.channelFuture;
+                } finally {
+                    lock.readLock().unlock();
+                }
+            }
+
+            public long getLastResponseTime() {
+                return this.lastResponseTime;
+            }
+
+            public void updateLastResponseTime() {
+                this.lastResponseTime = System.currentTimeMillis();
+            }
+
+            public String getChannelAddress() {
+                return channelAddress;
+            }
+
+            public boolean reconnect(final Channel channel) {
+                // 该 wrapper 已经不是 channel 的包装了， 说明已经重新连接了
+                if (!isWrapperOf(channel)) {
+                    LOGGER.warn("channelWrapper has reconnect, so do nothing, now channelId={}, input channelId={}", getChannel().id(), channel.id());
+                    return false;
+                }
+                // try lock , 如果进不去就不能执行了 -- 双重判断，外面无锁判断 内部有锁判断，Double Check
+                if (lock.writeLock().tryLock()) {
+                    try {
+                        if (isWrapperOf(channel)) {
+                            channelToClose = channelFuture;
+                            channelFuture = doConnect(channelAddress); // IP:PORT
+                            return true;
+                        } else {
+                            LOGGER.warn("channelWrapper has reconnect, so do nothing, now channelId={}, input channelId={}", getChannel().id(), channel.id());
+                        }
+                    } finally {
+                        lock.writeLock().unlock();
+                    }
+                } else {
+                    LOGGER.warn("channelWrapper reconnect try lock fail, now channelId={}", getChannel().id());
+                }
                 return false;
             }
-            // try lock , 如果进不去就不能执行了 -- 双重判断，外面无锁判断 内部有锁判断，Double Check
-            if (lock.writeLock().tryLock()) {
+
+            // 仅仅比对了一下？！
+            public boolean tryClose(Channel channel) {
                 try {
-                    if (isWrapperOf(channel)) {
-                        channelToClose = channelFuture;
-                        channelFuture = doConnect(channelAddress); // IP:PORT
-                        return true;
-                    } else {
-                        LOGGER.warn("channelWrapper has reconnect, so do nothing, now channelId={}, input channelId={}", getChannel().id(), channel.id());
+                    lock.readLock().lock();
+                    if (channelFuture != null) {
+                        if (channelFuture.channel().equals(channel)) {
+                            return true;
+                        }
+                    }
+                } finally {
+                    lock.readLock().unlock();
+                }
+                return false;
+            }
+
+            public void close() {
+                try {
+                    lock.writeLock().lock();
+                    if (channelFuture != null) {
+                        closeChannel(channelFuture.channel());
+                    }
+                    if (channelToClose != null) {
+                        closeChannel(channelToClose.channel());
                     }
                 } finally {
                     lock.writeLock().unlock();
                 }
-            } else {
-                LOGGER.warn("channelWrapper reconnect try lock fail, now channelId={}", getChannel().id());
             }
-            return false;
         }
 
-        // 仅仅比对了一下？！
-        public boolean tryClose(Channel channel) {
-            try {
-                lock.readLock().lock();
-                if (channelFuture != null) {
-                    if (channelFuture.channel().equals(channel)) {
-                        return true;
+        class InvokeCallbackWrapper implements InvokeCallback {
+
+            private final InvokeCallback invokeCallback;
+            private final String addr;
+
+            public InvokeCallbackWrapper(InvokeCallback invokeCallback, String addr) {
+                this.invokeCallback = invokeCallback;
+                this.addr = addr;
+            }
+
+            @Override
+            public void operationComplete(ResponseFuture responseFuture) {
+                this.invokeCallback.operationComplete(responseFuture);
+            }
+
+            @Override
+            public void operationSucceed(RemotingCommand response) {
+                updateChannelLastResponseTime(addr); // 记录操作成功的网络状态，用来跟业务解耦。
+                this.invokeCallback.operationSucceed(response);
+            }
+
+            @Override
+            public void operationFail(final Throwable throwable) {
+                this.invokeCallback.operationFail(throwable);
+            }
+        }
+
+        public class NettyClientHandler extends SimpleChannelInboundHandler<RemotingCommand> {
+            @Override
+            protected void channelRead0(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
+                processMessageReceived(ctx, msg);
+            }
+        }
+
+        /**
+         * 处理 Netty 客户端连接生命周期中的各种事件，同时将这些事件记录日志并上报给监听器（channelEventListener）
+         */
+        public class NettyConnectManageHandler extends ChannelDuplexHandler {
+            @Override
+            public void connect(ChannelHandlerContext ctx, SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) throws Exception {
+                // 本机地址
+                final String local = localAddress == null ? NetworkUtil.getLocalAddress() : RemotingHelper.parseSocketAddressAddr(localAddress);
+                // 远端地址
+                final String remote = remoteAddress == null ? "UNKNOWN" : RemotingHelper.parseSocketAddressAddr(remoteAddress);
+                LOGGER.info("NETTY CLIENT PIPELINE: CONNECT  {} => {}", local, remote);
+                super.connect(ctx, remoteAddress, localAddress, promise);
+                // 发送一个CONNECT事件给 ctx.channel
+                if (NettyRemotingClient.this.channelEventListener != null) {
+                    NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CONNECT, remote, ctx.channel())); // 发送给 channel。
+                }
+            }
+
+            @Override
+            public void channelActive(ChannelHandlerContext ctx) throws Exception {
+                final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
+                LOGGER.info("NETTY CLIENT PIPELINE: ACTIVE, {}, channelId={}", remoteAddress, ctx.channel().id());
+                super.channelActive(ctx);
+
+                if (NettyRemotingClient.this.channelEventListener != null) {
+                    NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.ACTIVE, remoteAddress, ctx.channel()));
+                }
+            }
+
+            @Override
+            public void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+                final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
+                LOGGER.info("NETTY CLIENT PIPELINE: DISCONNECT {}", remoteAddress);
+                closeChannel(ctx.channel());
+                super.disconnect(ctx, promise);
+
+                if (NettyRemotingClient.this.channelEventListener != null) {
+                    NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CLOSE, remoteAddress, ctx.channel()));
+                }
+            }
+
+            @Override
+            public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+                final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
+                LOGGER.info("NETTY CLIENT PIPELINE: CLOSE channel[addr={}, id={}]", remoteAddress, ctx.channel().id());
+                closeChannel(ctx.channel());
+                super.close(ctx, promise);
+                NettyRemotingClient.this.failFast(ctx.channel());
+                if (NettyRemotingClient.this.channelEventListener != null) {
+                    NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CLOSE, remoteAddress, ctx.channel()));
+                }
+            }
+
+
+            @Override
+            public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+                final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
+                LOGGER.info("NETTY CLIENT PIPELINE: channelInactive, the channel[addr={}, id={}]", remoteAddress, ctx.channel().id());
+                closeChannel(ctx.channel());
+                super.channelInactive(ctx);
+            }
+
+            // 用户事件扳机，用来处理事件回调，所有的事件都可以通过 evt 进行判断并且触发；而非用户自定义
+            @Override
+            public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+                if (evt instanceof IdleStateEvent) {
+                    IdleStateEvent event = (IdleStateEvent) evt;
+                    // public enum IdleState {
+                    //    /**
+                    //     * No data was either received or sent for a while.
+                    //     */
+                    //    ALL_IDLE
+                    if (event.state().equals(IdleState.ALL_IDLE)) {
+                        final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
+                        LOGGER.warn("NETTY CLIENT PIPELINE: IDLE exception channel[addr={}, id={}]", remoteAddress, ctx.channel().id());
+                        closeChannel(ctx.channel()); // 关闭这个 channel
+                        if (NettyRemotingClient.this.channelEventListener != null) {
+                            NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.IDLE, remoteAddress, ctx.channel()));
+                        }
                     }
                 }
-            } finally {
-                lock.readLock().unlock();
+                super.userEventTriggered(ctx, evt);
             }
-            return false;
-        }
 
-        public void close() {
-            try {
-                lock.writeLock().lock();
-                if (channelFuture != null) {
-                    closeChannel(channelFuture.channel());
-                }
-                if (channelToClose != null) {
-                    closeChannel(channelToClose.channel());
-                }
-            } finally {
-                lock.writeLock().unlock();
-            }
-        }
-    }
-
-    class InvokeCallbackWrapper implements InvokeCallback {
-
-        private final InvokeCallback invokeCallback;
-        private final String addr;
-
-        public InvokeCallbackWrapper(InvokeCallback invokeCallback, String addr) {
-            this.invokeCallback = invokeCallback;
-            this.addr = addr;
-        }
-
-        @Override
-        public void operationComplete(ResponseFuture responseFuture) {
-            this.invokeCallback.operationComplete(responseFuture);
-        }
-
-        @Override
-        public void operationSucceed(RemotingCommand response) {
-            updateChannelLastResponseTime(addr); // 记录操作成功的网络状态，用来跟业务解耦。
-            this.invokeCallback.operationSucceed(response);
-        }
-
-        @Override
-        public void operationFail(final Throwable throwable) {
-            this.invokeCallback.operationFail(throwable);
-        }
-    }
-
-    public class NettyClientHandler extends SimpleChannelInboundHandler<RemotingCommand> {
-        @Override
-        protected void channelRead0(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
-            processMessageReceived(ctx, msg);
-        }
-    }
-
-    /**
-     * 处理 Netty 客户端连接生命周期中的各种事件，同时将这些事件记录日志并上报给监听器（channelEventListener）
-     */
-    public class NettyConnectManageHandler extends ChannelDuplexHandler {
-        @Override
-        public void connect(ChannelHandlerContext ctx, SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) throws Exception {
-            // 本机地址
-            final String local = localAddress == null ? NetworkUtil.getLocalAddress() : RemotingHelper.parseSocketAddressAddr(localAddress);
-            // 远端地址
-            final String remote = remoteAddress == null ? "UNKNOWN" : RemotingHelper.parseSocketAddressAddr(remoteAddress);
-            LOGGER.info("NETTY CLIENT PIPELINE: CONNECT  {} => {}", local, remote);
-            super.connect(ctx, remoteAddress, localAddress, promise);
-            // 发送一个CONNECT事件给 ctx.channel
-            if (NettyRemotingClient.this.channelEventListener != null) {
-                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CONNECT, remote, ctx.channel())); // 发送给 channel。
-            }
-        }
-
-        @Override
-        public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
-            LOGGER.info("NETTY CLIENT PIPELINE: ACTIVE, {}, channelId={}", remoteAddress, ctx.channel().id());
-            super.channelActive(ctx);
-
-            if (NettyRemotingClient.this.channelEventListener != null) {
-                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.ACTIVE, remoteAddress, ctx.channel()));
-            }
-        }
-
-        @Override
-        public void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-            final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
-            LOGGER.info("NETTY CLIENT PIPELINE: DISCONNECT {}", remoteAddress);
-            closeChannel(ctx.channel());
-            super.disconnect(ctx, promise);
-
-            if (NettyRemotingClient.this.channelEventListener != null) {
-                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CLOSE, remoteAddress, ctx.channel()));
-            }
-        }
-
-        @Override
-        public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-            final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
-            LOGGER.info("NETTY CLIENT PIPELINE: CLOSE channel[addr={}, id={}]", remoteAddress, ctx.channel().id());
-            closeChannel(ctx.channel());
-            super.close(ctx, promise);
-            NettyRemotingClient.this.failFast(ctx.channel());
-            if (NettyRemotingClient.this.channelEventListener != null) {
-                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.CLOSE, remoteAddress, ctx.channel()));
-            }
-        }
-
-
-        @Override
-        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
-            LOGGER.info("NETTY CLIENT PIPELINE: channelInactive, the channel[addr={}, id={}]", remoteAddress, ctx.channel().id());
-            closeChannel(ctx.channel());
-            super.channelInactive(ctx);
-        }
-
-        // 用户事件扳机，用来处理事件回调，所有的事件都可以通过 evt 进行判断并且触发；而非用户自定义
-        @Override
-        public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-            if (evt instanceof IdleStateEvent) {
-                IdleStateEvent event = (IdleStateEvent) evt;
-                // public enum IdleState {
-                //    /**
-                //     * No data was either received or sent for a while.
-                //     */
-                //    ALL_IDLE
-                if (event.state().equals(IdleState.ALL_IDLE)) {
-                    final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
-                    LOGGER.warn("NETTY CLIENT PIPELINE: IDLE exception channel[addr={}, id={}]", remoteAddress, ctx.channel().id());
-                    closeChannel(ctx.channel()); // 关闭这个 channel
-                    if (NettyRemotingClient.this.channelEventListener != null) {
-                        NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.IDLE, remoteAddress, ctx.channel()));
-                    }
+            @Override
+            public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+                final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel()); // 远程地址
+                LOGGER.warn("NETTY CLIENT PIPELINE: exceptionCaught channel[addr={}, id={}]", remoteAddress, ctx.channel().id(), cause);
+                closeChannel(ctx.channel());
+                if (NettyRemotingClient.this.channelEventListener != null) {
+                    NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.EXCEPTION, remoteAddress, ctx.channel()));
                 }
             }
-            super.userEventTriggered(ctx, evt);
         }
 
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel()); // 远程地址
-            LOGGER.warn("NETTY CLIENT PIPELINE: exceptionCaught channel[addr={}, id={}]", remoteAddress, ctx.channel().id(), cause);
-            closeChannel(ctx.channel());
-            if (NettyRemotingClient.this.channelEventListener != null) {
-                NettyRemotingClient.this.putNettyEvent(new NettyEvent(NettyEventType.EXCEPTION, remoteAddress, ctx.channel()));
-            }
-        }
     }
-
-}

@@ -2,9 +2,7 @@ package org.syntax.netty.s1;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -12,7 +10,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import java.nio.charset.Charset;
 
 public class EventLoopServer {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         /**
          * 启动ServerBootstrap
          * → 绑定端口
@@ -23,7 +21,8 @@ public class EventLoopServer {
          * → 连接关闭（channelInactive）
          * → 释放资源
          */
-        new ServerBootstrap() // ServerBootstrap 用来创建服务端； Bootstrap 用来创建客户端
+        ServerBootstrap serverBootstrap = new ServerBootstrap();
+        ChannelFuture bind = serverBootstrap // ServerBootstrap 用来创建服务端； Bootstrap 用来创建客户端
                 .group(new NioEventLoopGroup(2))
                 .channel(NioServerSocketChannel.class)
                 .childHandler(new ChannelInitializer<SocketChannel>() {
@@ -38,7 +37,9 @@ public class EventLoopServer {
                             }
                         });
                     }
-                }).bind(8080);
-        System.out.println("启动");
+                }).bind(8080).sync();
+        Channel channel = bind.channel();
+
+        System.out.println("启动" + channel.localAddress() + channel.remoteAddress());
     }
 }
