@@ -27,13 +27,17 @@ public class test {
         });
 
         // 阻塞主线程，等待异步任务完成
-        result.get();
+//        result.get();
 
         CompletableFuture<Integer> future1 = CompletableFuture.completedFuture(11);
-        CompletableFuture<Void> voidCompletableFuture = future1.thenAccept(System.out::println);
+        Integer i = future1.whenComplete((v, t) -> {
+            System.out.println(t);
+            System.out.println(v);
+        }).thenApply((v)->{
+            v += 1;
+            return v;
+        }).get();
+        System.out.println(i);
 
-        voidCompletableFuture.thenRun(() -> {
-            System.out.println("结束");
-        }).join();
     }
 }

@@ -2,6 +2,7 @@ package org.apache.rocketmq.remoting.netty;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
+import com.google.common.base.Stopwatch;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
@@ -783,12 +784,61 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         });
     }
 
-
     @Override
     public CompletableFuture<RemotingCommand> invoke(String addr, RemotingCommand request, long timeoutMillis) {
-        return RemotingClient.super.invoke(addr, request, timeoutMillis);
+        CompletableFuture<RemotingCommand> future = new CompletableFuture<>();
+        try {
+            final ChannelFuture channelFuture = this.getAndCreateChannelAsync(addr);
+            if (channelFuture == null) {
+                future.completeExceptionally(new RemotingConnectException(addr));
+                return future;
+            }
+            channelFuture.addListener(f -> {
+                if (f.isSuccess()) {
+                    Channel channel = channelFuture.channel(); // 得到通道
+                    if (channel != null && channel.isActive()) {
+                        // 异步唤醒调用链 - 执行 callback
+                        invokeImpl(channel, request, timeoutMillis).whenComplete((v, t) -> {
+                            if (t == null) {
+                                updateChannelLastResponseTime(addr); // 更新时间
+                            }
+                        }).thenApply(ResponseFuture::getResponseCommand).whenComplete((v, t) -> {
+                            if (t != null) {
+                                future.completeExceptionally(t);
+                            } else {
+                                future.complete(v);
+                            }
+                        });
+                    } else {
+                        this.closeChannel(addr, channel);
+                        future.completeExceptionally(new RemotingConnectException(addr));
+                    }
+                } else {
+                    future.completeExceptionally(new RemotingConnectException(addr));
+                }
+            });
+        } catch (Throwable t) {
+            future.completeExceptionally(t);
+        }
+        return future;
     }
-    // EMOJI CURSOR ⚠️
+
+    /**
+     * 唤醒函数的具体实现，所有的回调流程会封装在这里面执行。
+     * @param channel
+     * @param request
+     * @param timeoutMillis
+     * @return
+     */
+    @Override
+    public CompletableFuture<ResponseFuture> invokeImpl(Channel channel, RemotingCommand request, long timeoutMillis) {
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        String channelRemoteAddr = RemotingHelper.parseChannelRemoteAddr(channel);
+        doBeforeRpcHooks(channelRemoteAddr, request);
+
+        return super.invokeImpl(channel,request,timeoutMillis)
+    }
+// EMOJI CURSOR ⚠️
 
     private void scanAvailableNameSrv() {
         List<String> nameServerList = this.namesrvAddrList.get();
