@@ -16,21 +16,21 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 /**
  * 用于处理一次请求响应的核心类，在使用之后就失效了。
- *
+ * <p>
  * - 为什么 ResponseFuture 会被多个线程访问？
-     业务线程（发送请求）
-         → 创建 ResponseFuture
-         → send 请求
-         → 等待（sync 模式）或立即返回（async）
-
-    Netty I/O 线程收到响应
-         → responseFuture.putResponse(...)
-         → if has callback → submit executeInvokeCallback()
-
-    callback 执行线程或网络线程
-         → responseFuture.executeInvokeCallback()
-         → 调用回调成功/失败 api
-         → 调用 responseFuture.release()
+ * 业务线程（发送请求）
+ * → 创建 ResponseFuture
+ * → send 请求
+ * → 等待（sync 模式）或立即返回（async）
+ * <p>
+ * Netty I/O 线程收到响应
+ * → responseFuture.putResponse(...)
+ * → if has callback → submit executeInvokeCallback()
+ * <p>
+ * callback 执行线程或网络线程
+ * → responseFuture.executeInvokeCallback()
+ * → 调用回调成功/失败 api
+ * → 调用 responseFuture.release()
  */
 public class ResponseFuture {
     private final Channel channel; // 使用的 Netty 通道

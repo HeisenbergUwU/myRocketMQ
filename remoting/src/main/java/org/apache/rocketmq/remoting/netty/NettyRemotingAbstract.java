@@ -493,7 +493,7 @@ public abstract class NettyRemotingAbstract {
     }
 
     protected CompletableFuture<ResponseFuture> invoke0(final Channel channel, final RemotingCommand request, final long timeoutMillis) {
-        CompletableFuture<ResponseFuture> future = new CompletableFuture<>();
+        CompletableFuture<ResponseFuture> future = new CompletableFuture<>(); // 创建异步对象
         long beginStartTime = System.currentTimeMillis();
         final int opaque = request.getOpaque();
 
@@ -501,7 +501,7 @@ public abstract class NettyRemotingAbstract {
         try {
             acquired = this.semaphoreAsync.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
         } catch (Throwable t) {
-            future.completeExceptionally(t);
+            future.completeExceptionally(t); // 锁定超时异常
             return future;
         }
         if (acquired) {
@@ -530,7 +530,7 @@ public abstract class NettyRemotingAbstract {
                     future.completeExceptionally(throwable);
                 }
             }, once);
-            responseFutureReference.set(responseFuture);
+            responseFutureReference.set(responseFuture); // 原子性引用
             this.responseTable.put(opaque, responseFuture);
             try {
                 channel.writeAndFlush(request).addListener((ChannelFutureListener) f -> {
@@ -562,18 +562,21 @@ public abstract class NettyRemotingAbstract {
     }
 
     public void invokeAsyncImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis, final InvokeCallback invokeCallback) {
-        invokeImpl(channel, request, timeoutMillis).whenComplete((v, t) -> {
-            if (t == null) {
-                invokeCallback.operationComplete(v);
-            } else {
-                ResponseFuture responseFuture = new ResponseFuture(channel, request.getOpaque(), request, timeoutMillis, null, null);
-                responseFuture.setCause(t);
-                invokeCallback.operationComplete(responseFuture);
-            }
-        }).thenAccept(responseFuture -> invokeCallback.operationSucceed(responseFuture.getResponseCommand())).exceptionally(t -> {
-            invokeCallback.operationFail(ExceptionUtils.getRealException(t));
-            return null;
-        });
+        invokeImpl(channel, request, timeoutMillis)
+                .whenComplete((v, t) -> {
+                    if (t == null) {
+                        invokeCallback.operationComplete(v);
+                    } else {
+                        ResponseFuture responseFuture = new ResponseFuture(channel, request.getOpaque(), request, timeoutMillis, null, null);
+                        responseFuture.setCause(t);
+                        invokeCallback.operationComplete(responseFuture);
+                    }
+                })
+                .thenAccept(responseFuture -> invokeCallback.operationSucceed(responseFuture.getResponseCommand()))
+                .exceptionally(t -> {
+                    invokeCallback.operationFail(ExceptionUtils.getRealException(t));
+                    return null;
+                });
     }
 
     private void requestFail(final int opaque) {
@@ -607,7 +610,8 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
-    public void invokeOnewayImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis) throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
+    public void invokeOnewayImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis)
+            throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
         request.markOnewayRPC();
         boolean acquired = this.semaphoreOneway.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
         if (acquired) {
@@ -628,7 +632,12 @@ public abstract class NettyRemotingAbstract {
             if (timeoutMillis <= 0) {
                 throw new RemotingTooMuchRequestException("invokeOnewayImpl invoke too fast");
             } else {
-                String info = String.format("invokeOnewayImpl tryAcquire semaphore timeout, %dms, waiting thread nums: %d semaphoreOnewayValue: %d", timeoutMillis, this.semaphoreOneway.getQueueLength(), this.semaphoreOneway.availablePermits());
+                String info = String.format(
+                        "invokeOnewayImpl tryAcquire semaphore timeout, %dms, waiting thread nums: %d semaphoreOnewayValue: %d",
+                        timeoutMillis,
+                        this.semaphoreOneway.getQueueLength(),
+                        this.semaphoreOneway.availablePermits()
+                );
                 log.warn(info);
                 throw new RemotingTimeoutException(info);
             }
