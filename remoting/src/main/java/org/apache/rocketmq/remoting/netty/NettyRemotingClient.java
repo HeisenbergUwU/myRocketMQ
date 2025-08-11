@@ -825,6 +825,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     /**
      * 唤醒函数的具体实现，所有的回调流程会封装在这里面执行。
+     *
      * @param channel
      * @param request
      * @param timeoutMillis
@@ -835,8 +836,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         Stopwatch stopwatch = Stopwatch.createStarted();
         String channelRemoteAddr = RemotingHelper.parseChannelRemoteAddr(channel);
         doBeforeRpcHooks(channelRemoteAddr, request);
-
-        return super.invokeImpl(channel,request,timeoutMillis)
+        // 超类的回调就是将request发送到channel中。writeAndFlush + 日志记录等
+        return super.invokeImpl(channel, request, timeoutMillis)
+                .thenCompose(responseFuture -> {
+                    
+                })
     }
 // EMOJI CURSOR ⚠️
 
