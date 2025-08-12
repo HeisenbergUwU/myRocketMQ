@@ -356,6 +356,11 @@ public class RemotingHelper {
         }
     }
 
+    /**
+     * 将ChannelFuture执行之后，回调CompletableFuture
+     * @param channelFuture
+     * @return
+     */
     public static CompletableFuture<Void> convertChannelFutureToCompletableFuture(ChannelFuture channelFuture) {
         CompletableFuture<Void> completableFuture = new CompletableFuture<>();
         channelFuture.addListener((ChannelFutureListener) future -> {

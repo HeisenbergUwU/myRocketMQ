@@ -3,6 +3,7 @@ package org.apache.rocketmq.remoting;
 import org.apache.rocketmq.remoting.pipeline.RequestPipeline;
 
 public interface RemotingService {
+
     void start();
 
     void shutdown();

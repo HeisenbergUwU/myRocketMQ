@@ -20,6 +20,7 @@ import io.netty.util.TimerTask;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.rocketmq.common.Pair;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.utils.FutureUtils;
@@ -697,6 +698,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                         this.channelTables.remove(addr);
                     }
                 }
+                return createChannel(addr).getChannelFuture();
             } catch (Exception e) {
                 LOGGER.error("createChannel: create channel exception", e);
             } finally {
@@ -843,54 +845,148 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         doBeforeRpcHooks(channelRemoteAddr, request);
 
         return super.invokeImpl(channel, request, timeoutMillis)
-                .thenCompose(responseFuture -> { // 合并 上一个 回调的计算结果
-            RemotingCommand response = responseFuture.getResponseCommand();
-            if (response.getCode() == ResponseCode.GO_AWAY) {
-                if (nettyClientConfig.isEnableReconnectForGoAway()) {
-                    LOGGER.info("Receive go away from channelId={}, channel={}", channel.id(), channel);
-                    ChannelWrapper channelWrapper = channelWrapperTables.computeIfPresent(channel, (channel0, channelWrapper0) -> {
-                        try {
-                            if (channelWrapper0.reconnect(channel0)) {
-                                LOGGER.info("Receive go away from channelId={}, channel={}, recreate the channelId={}", channel0.id(), channel0, channelWrapper0.getChannel().id());
-                                channelWrapperTables.put(channelWrapper0.getChannel(), channelWrapper0);
+                .thenCompose(responseFuture -> { // 合并 上一个 回调的计算结果 Function(responseFuture) -> CompletionStage 【CompletableFuture】
+                    RemotingCommand response = responseFuture.getResponseCommand();
+                    if (response.getCode() == ResponseCode.GO_AWAY) {
+                        if (nettyClientConfig.isEnableReconnectForGoAway()) { //
+                            LOGGER.info("Receive go away from channelId={}, channel={}", channel.id(), channel);
+                            ChannelWrapper channelWrapper = channelWrapperTables.computeIfPresent(channel, (channel0, channelWrapper0) -> {
+                                try {
+                                    if (channelWrapper0.reconnect(channel0)) {
+                                        LOGGER.info("Receive go away from channelId={}, channel={}, recreate the channelId={}", channel0.id(), channel0, channelWrapper0.getChannel().id());
+                                        channelWrapperTables.put(channelWrapper0.getChannel(), channelWrapper0);
+                                    }
+                                } catch (Throwable t) {
+                                    LOGGER.error("Channel {} reconnect error", channelWrapper0, t);
+                                }
+                                return channelWrapper0;
+                            });
+                            if (channelWrapper != null && !channelWrapper.isWrapperOf(channel)) {
+                                RemotingCommand retryRequest = RemotingCommand.createRequestCommand(request.getCode(), request.readCustomHeader());
+                                retryRequest.setBody(request.getBody());
+                                retryRequest.setExtFields(request.getExtFields());
+                                CompletableFuture<Void> future = convertChannelFutureToCompletableFuture(channelWrapper.getChannelFuture());
+                                return future.thenCompose(v -> {
+                                    long duration = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+                                    stopwatch.stop();
+                                    return super.invokeImpl(channelWrapper.getChannel(), retryRequest, timeoutMillis - duration)
+                                            .thenCompose(r -> {
+                                                if (r.getResponseCommand().getCode() == ResponseCode.GO_AWAY) {
+                                                    return FutureUtils.completeExceptionally(new RemotingSendRequestException(channelRemoteAddr,
+                                                            new Throwable("Receive GO_AWAY twice in request from channelId=" + channel.id())));
+                                                }
+                                                return CompletableFuture.completedFuture(r); // 返回一个已经完成的  CompletableFuture<ResponseFuture>
+                                            });
+                                });
+                            } else {
+                                LOGGER.warn("invokeImpl receive GO_AWAY, channelWrapper is null or channel is the same in wrapper, channelId={}", channel.id());
                             }
-                        } catch (Throwable t) {
-                            LOGGER.error("Channel {} reconnect error", channelWrapper0, t);
                         }
-                        return channelWrapper0;
-                    });
-                    if (channelWrapper != null && !channelWrapper.isWrapperOf(channel)) {
-                        RemotingCommand retryRequest = RemotingCommand.createRequestCommand(request.getCode(), request.readCustomHeader());
-                        retryRequest.setBody(request.getBody());
-                        retryRequest.setExtFields(request.getExtFields());
-                        CompletableFuture<Void> future = convertChannelFutureToCompletableFuture(channelWrapper.getChannelFuture());
-                        return future.thenCompose(v -> {
-                            long duration = stopwatch.elapsed(TimeUnit.MILLISECONDS);
-                            stopwatch.stop();
-                            return super.invokeImpl(channelWrapper.getChannel(), retryRequest, timeoutMillis - duration)
-                                    .thenCompose(r -> {
-                                        if (r.getResponseCommand().getCode() == ResponseCode.GO_AWAY) {
-                                            return FutureUtils.completeExceptionally(new RemotingSendRequestException(channelRemoteAddr,
-                                                    new Throwable("Receive GO_AWAY twice in request from channelId=" + channel.id())));
-                                        }
-                                        return CompletableFuture.completedFuture(r);
-                                    });
-                        });
-                    } else {
-                        LOGGER.warn("invokeImpl receive GO_AWAY, channelWrapper is null or channel is the same in wrapper, channelId={}", channel.id());
+                        return FutureUtils.completeExceptionally(new RemotingSendRequestException(channelRemoteAddr, new Throwable("Receive GO_AWAY from channelId=" + channel.id())));
                     }
-                }
-                return FutureUtils.completeExceptionally(new RemotingSendRequestException(channelRemoteAddr, new Throwable("Receive GO_AWAY from channelId=" + channel.id())));
-            }
-            return CompletableFuture.completedFuture(responseFuture);
-        }).whenComplete((v, t) -> {
-            if (t == null) {
-                doAfterRpcHooks(channelRemoteAddr, request, v.getResponseCommand());
-            }
-        });
+                    return CompletableFuture.completedFuture(responseFuture);
+                })
+                .whenComplete((v, t) -> {
+                    if (t == null) {
+                        doAfterRpcHooks(channelRemoteAddr, request, v.getResponseCommand()); // 后回调函数
+                    }
+                });
     }
 
-    // EMOJI CURSOR ⚠️
+    // 请求码 - <处理方法, 线程池>
+    @Override
+    public void registerProcessor(int requestCode, NettyRequestProcessor processor, ExecutorService executor) {
+        ExecutorService executorThis = executor;
+        if (null == executor) {
+            executorThis = this.publicExecutor;
+        }
+
+        Pair<NettyRequestProcessor, ExecutorService> pair = new Pair<>(processor, executorThis);
+        this.processorTable.put(requestCode, pair);
+    }
+
+    /**
+     * channel 可写否？
+     *
+     * @param addr
+     * @return
+     */
+    @Override
+    public boolean isChannelWritable(String addr) {
+        ChannelWrapper cw = this.channelTables.get(addr);
+        if (cw != null && cw.isOK()) {
+            return cw.isWritable();
+        }
+        return true;
+    }
+
+    @Override
+    public boolean isAddressReachable(String addr) {
+        if (addr == null || addr.isEmpty()) {
+            return false;
+        }
+        try {
+            Channel channel = getAndCreateChannel(addr);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return false;
+    }
+
+    @Override
+    public List<String> getNameServerAddressList() {
+        return this.namesrvAddrList.get();
+    }
+
+    @Override
+    public List<String> getAvailableNameSrvList() {
+        return new ArrayList<>(this.availableNamesrvAddrMap.keySet());
+    }
+
+    @Override
+    public ChannelEventListener getChannelEventListener() {
+        return channelEventListener;
+    }
+
+    /**
+     * 获取回调执行线程池
+     *
+     * @return
+     */
+    @Override
+    public ExecutorService getCallbackExecutor() {
+        if (nettyClientConfig.isDisableCallbackExecutor()) {
+            return null;
+        }
+        return callbackExecutor != null ? callbackExecutor : publicExecutor;
+    }
+
+    @Override
+    public void setCallbackExecutor(final ExecutorService callbackExecutor) {
+        this.callbackExecutor = callbackExecutor;
+    }
+
+    protected void scanChannelTablesOfNameServer() {
+        List<String> nameServerList = this.namesrvAddrList.get(); // 因为是 AtomicReference
+        if (nameServerList == null) {
+            LOGGER.warn("[SCAN] Addresses of name server is empty!");
+            return;
+        }
+        //  ConcurrentMap<String, NettyRemotingClient.ChannelWrapper>
+        for (Map.Entry<String, ChannelWrapper> entry : this.channelTables.entrySet()) {
+            String addr = entry.getKey();
+            ChannelWrapper channelWrapper = entry.getValue();
+            if (channelWrapper == null) {
+                continue;
+            }
+
+            if ((System.currentTimeMillis() - channelWrapper.getLastResponseTime()) > this.nettyClientConfig.getChannelNotActiveInterval()) {
+                LOGGER.warn("[SCAN] No response after {} from name server {}, so close it!", channelWrapper.getLastResponseTime(), addr);
+                closeChannel(addr, channelWrapper.getChannel());
+            }
+        }
+    }
+
 
     private void scanAvailableNameSrv() {
         List<String> nameServerList = this.namesrvAddrList.get();
@@ -927,29 +1023,6 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             });
         }
     }
-
-
-    protected void scanChannelTablesOfNameServer() {
-        List<String> nameServerList = this.namesrvAddrList.get(); // 因为是 AtomicReference
-        if (nameServerList == null) {
-            LOGGER.warn("[SCAN] Addresses of name server is empty!");
-            return;
-        }
-        //  ConcurrentMap<String, NettyRemotingClient.ChannelWrapper>
-        for (Map.Entry<String, ChannelWrapper> entry : this.channelTables.entrySet()) {
-            String addr = entry.getKey();
-            ChannelWrapper channelWrapper = entry.getValue();
-            if (channelWrapper == null) {
-                continue;
-            }
-
-            if ((System.currentTimeMillis() - channelWrapper.getLastResponseTime()) > this.nettyClientConfig.getChannelNotActiveInterval()) {
-                LOGGER.warn("[SCAN] No response after {} from name server {}, so close it!", channelWrapper.getLastResponseTime(), addr);
-                closeChannel(addr, channelWrapper.getChannel());
-            }
-        }
-    }
-
 
     private ChannelFuture getAndCreateNameserverChannelAsync() throws InterruptedException {
         String addr = this.namesrvAddrChoosed.get(); // 当前选择的NS
@@ -989,49 +1062,6 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             }
         }
         return null; // 是会得到空的 ChannelFuture 对象的
-    }
-
-
-    @Override
-    public List<String> getNameServerAddressList() {
-        return Collections.emptyList();
-    }
-
-    @Override
-    public List<String> getAvailableNameSrvList() {
-        return Collections.emptyList();
-    }
-
-
-    @Override
-    public void registerProcessor(int requestCode, NettyRequestProcessor processor, ExecutorService executor) {
-
-    }
-
-    @Override
-    public void setCallbackExecutor(ExecutorService callbackExecutor) {
-
-    }
-
-    @Override
-    public boolean isChannelWritable(String addr) {
-        return false;
-    }
-
-    @Override
-    public boolean isAddressReachable(String addr) {
-        return false;
-    }
-
-
-    @Override
-    public ChannelEventListener getChannelEventListener() {
-        return null;
-    }
-
-    @Override
-    public ExecutorService getCallbackExecutor() {
-        return null;
     }
 
 

@@ -1,11 +1,11 @@
 package org.syntax;
 
+import com.google.common.base.Stopwatch;
+
 /**
  * Hello world!
- *
  */
-public class App 
-{
+public class App {
 
     private static String clearNewLine(final String str) {
         /**
@@ -29,8 +29,11 @@ public class App
 
         return newString;
     }
-    public static void main( String[] args )
-    {
+
+    public static void main(String[] args) {
+        Stopwatch stopwatch = Stopwatch.createStarted();
         System.out.println(clearNewLine("Hello\r\n world"));
+        stopwatch.stop();
+        System.out.println(stopwatch);
     }
 }
