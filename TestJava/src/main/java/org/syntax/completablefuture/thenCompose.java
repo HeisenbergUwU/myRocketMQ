@@ -15,13 +15,22 @@ public class thenCompose {
                 throw new RuntimeException(e);
             }
             System.out.println(s);
-            return "";
+            return "C";
         });
+
         System.out.println(future.isDone()); // future is Done,
         System.out.println(stringCompletableFuture.isDone()); // stringCompletableFuture is not Done yet
 
         Thread.sleep(1000); // if I annotating this code , ABC will not be printed.
         System.out.println(stringCompletableFuture.isDone()); // Done for sure.
+
+        CompletableFuture<String> future1 = CompletableFuture.supplyAsync(() -> "Hello");
+        CompletableFuture<String> future2 = CompletableFuture.supplyAsync(() -> "World");
+
+        CompletableFuture<String> combinedFuture = future2.thenCombine(future1, (result1, result2) -> result1 + " " + result2);
+
+        combinedFuture.thenAccept(result -> System.out.println("Combined result: " + result));
+
 
     }
 }
