@@ -460,7 +460,7 @@ public abstract class NettyRemotingAbstract {
         while (it.hasNext()) {
             Entry<Integer, ResponseFuture> next = it.next();
             ResponseFuture rep = next.getValue();
-
+            // 超时之后清理 ResponseFuture，防止堆积。
             if ((rep.getBeginTimestamp() + rep.getTimeoutMillis() + 1000) <= System.currentTimeMillis()) {
                 rep.release();
                 it.remove();
