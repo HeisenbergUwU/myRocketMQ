@@ -22,6 +22,7 @@ import io.netty.util.concurrent.EventExecutorGroup;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.constant.LoggerName;
+import org.apache.rocketmq.common.utils.FutureUtils;
 import org.apache.rocketmq.common.utils.NetworkUtil;
 import org.apache.rocketmq.common.utils.ThreadUtils;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
@@ -36,6 +37,7 @@ import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
+import org.apache.rocketmq.remoting.protocol.ResponseCode;
 import org.apache.rocketmq.remoting.proxy.SocksProxyConfig;
 
 import java.io.IOException;
@@ -49,6 +51,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static org.apache.rocketmq.remoting.common.RemotingHelper.convertChannelFutureToCompletableFuture;
 
 public class NettyRemotingClient extends NettyRemotingAbstract implements RemotingClient {
 
@@ -832,17 +836,61 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
      * @return
      */
     @Override
-    public CompletableFuture<ResponseFuture> invokeImpl(Channel channel, RemotingCommand request, long timeoutMillis) {
+    public CompletableFuture<ResponseFuture> invokeImpl(final Channel channel, final RemotingCommand request,
+                                                        final long timeoutMillis) {
         Stopwatch stopwatch = Stopwatch.createStarted();
         String channelRemoteAddr = RemotingHelper.parseChannelRemoteAddr(channel);
         doBeforeRpcHooks(channelRemoteAddr, request);
-        // 超类的回调就是将request发送到channel中。writeAndFlush + 日志记录等
+
         return super.invokeImpl(channel, request, timeoutMillis)
-                .thenCompose(responseFuture -> {
-                    
-                })
+                .thenCompose(responseFuture -> { // 合并 上一个 回调的计算结果
+            RemotingCommand response = responseFuture.getResponseCommand();
+            if (response.getCode() == ResponseCode.GO_AWAY) {
+                if (nettyClientConfig.isEnableReconnectForGoAway()) {
+                    LOGGER.info("Receive go away from channelId={}, channel={}", channel.id(), channel);
+                    ChannelWrapper channelWrapper = channelWrapperTables.computeIfPresent(channel, (channel0, channelWrapper0) -> {
+                        try {
+                            if (channelWrapper0.reconnect(channel0)) {
+                                LOGGER.info("Receive go away from channelId={}, channel={}, recreate the channelId={}", channel0.id(), channel0, channelWrapper0.getChannel().id());
+                                channelWrapperTables.put(channelWrapper0.getChannel(), channelWrapper0);
+                            }
+                        } catch (Throwable t) {
+                            LOGGER.error("Channel {} reconnect error", channelWrapper0, t);
+                        }
+                        return channelWrapper0;
+                    });
+                    if (channelWrapper != null && !channelWrapper.isWrapperOf(channel)) {
+                        RemotingCommand retryRequest = RemotingCommand.createRequestCommand(request.getCode(), request.readCustomHeader());
+                        retryRequest.setBody(request.getBody());
+                        retryRequest.setExtFields(request.getExtFields());
+                        CompletableFuture<Void> future = convertChannelFutureToCompletableFuture(channelWrapper.getChannelFuture());
+                        return future.thenCompose(v -> {
+                            long duration = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+                            stopwatch.stop();
+                            return super.invokeImpl(channelWrapper.getChannel(), retryRequest, timeoutMillis - duration)
+                                    .thenCompose(r -> {
+                                        if (r.getResponseCommand().getCode() == ResponseCode.GO_AWAY) {
+                                            return FutureUtils.completeExceptionally(new RemotingSendRequestException(channelRemoteAddr,
+                                                    new Throwable("Receive GO_AWAY twice in request from channelId=" + channel.id())));
+                                        }
+                                        return CompletableFuture.completedFuture(r);
+                                    });
+                        });
+                    } else {
+                        LOGGER.warn("invokeImpl receive GO_AWAY, channelWrapper is null or channel is the same in wrapper, channelId={}", channel.id());
+                    }
+                }
+                return FutureUtils.completeExceptionally(new RemotingSendRequestException(channelRemoteAddr, new Throwable("Receive GO_AWAY from channelId=" + channel.id())));
+            }
+            return CompletableFuture.completedFuture(responseFuture);
+        }).whenComplete((v, t) -> {
+            if (t == null) {
+                doAfterRpcHooks(channelRemoteAddr, request, v.getResponseCommand());
+            }
+        });
     }
-// EMOJI CURSOR ⚠️
+
+    // EMOJI CURSOR ⚠️
 
     private void scanAvailableNameSrv() {
         List<String> nameServerList = this.namesrvAddrList.get();
