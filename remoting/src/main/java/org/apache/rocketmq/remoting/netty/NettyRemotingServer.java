@@ -237,8 +237,11 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     }
 
     protected ChannelPipeline configChannel(SocketChannel ch) {
-        return ch.pipeline().addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null, // 如果是 null 那么则使用 boss 的 EventLoop
-                HANDSHAKE_HANDLER_NAME, new HandshakeHandler()).addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null, encoder, new NettyDecoder(), distributionHandler, new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()), connectionManageHandler, serverHandler);
+        return ch.pipeline()
+                .addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null, // 如果是 null 那么则使用 boss 的 EventLoop
+                        HANDSHAKE_HANDLER_NAME, new HandshakeHandler())
+                .addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null,
+                        encoder, new NettyDecoder(), distributionHandler, new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()), connectionManageHandler, serverHandler);
     }
 
     private void addCustomConfig(ServerBootstrap childHandler) {
@@ -372,6 +375,23 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     }
 
 
+    private void printRemotingCodeDistribution() {
+        if (distributionHandler != null) {
+            String inBoundSnapshotString = distributionHandler.getInBoundSnapshotString();
+            if (inBoundSnapshotString != null) {
+                TRAFFIC_LOGGER.info("Port: {}, RequestCode Distribution: {}",
+                        nettyServerConfig.getListenPort(), inBoundSnapshotString);
+            }
+
+            String outBoundSnapshotString = distributionHandler.getOutBoundSnapshotString();
+            if (outBoundSnapshotString != null) {
+                TRAFFIC_LOGGER.info("Port: {}, ResponseCode Distribution: {}",
+                        nettyServerConfig.getListenPort(), outBoundSnapshotString);
+            }
+        }
+    }
+
+
     class SubRemotingServer extends NettyRemotingAbstract implements RemotingServer {
         private volatile int listenPort;
         private volatile Channel serverChannel;
@@ -483,10 +503,6 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         public ExecutorService getCallbackExecutor() {
             return NettyRemotingServer.this.getCallbackExecutor();
         }
-    }
-
-    private void printRemotingCodeDistribution() {
-        
     }
 
     public class HAProxyMessageHandler extends ChannelInboundHandlerAdapter {
