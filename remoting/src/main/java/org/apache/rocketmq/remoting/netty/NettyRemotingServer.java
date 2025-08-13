@@ -391,6 +391,98 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    public DefaultEventExecutorGroup getDefaultEventExecutorGroup() {
+        return defaultEventExecutorGroup;
+    }
+
+    public NettyEncoder getEncoder() {
+        return encoder;
+    }
+
+    public NettyConnectManageHandler getConnectionManageHandler() {
+        return connectionManageHandler;
+    }
+
+    public NettyServerHandler getServerHandler() {
+        return serverHandler;
+    }
+
+    public RemotingCodeDistributionHandler getDistributionHandler() {
+        return distributionHandler;
+    }
+
+    public class HandshakeHandler extends ByteToMessageDecoder {
+
+        public HandshakeHandler() {
+        }
+
+        @Override
+        protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
+            try {
+                ProtocolDetectionResult<HAProxyProtocolVersion> detectionResult = HAProxyMessageDecoder.detectProtocol(byteBuf);
+            } catch (Exception e) {
+                log.error("process proxy protocol negotiator failed.", e);
+                throw e;
+            }
+        }
+    }
+
+    @ChannelHandler.Sharable
+    public class TlsModeHandler extends SimpleChannelInboundHandler<ByteBuf> {
+
+        private final TlsMode tlsMode;
+
+        private static final byte HANDSHAKE_MAGIC_CODE = 0x16;
+
+        TlsModeHandler(TlsMode tlsMode) {
+            this.tlsMode = tlsMode;
+        }
+
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
+
+            // Peek the current read index byte to determine if the content is starting with TLS handshake
+            byte b = msg.getByte(msg.readerIndex());
+
+            if (b == HANDSHAKE_MAGIC_CODE) {
+                switch (tlsMode) {
+                    case DISABLED:
+                        ctx.close();
+                        log.warn("Clients intend to establish an SSL connection while this server is running in SSL disabled mode");
+                        throw new UnsupportedOperationException("The NettyRemotingServer in SSL disabled mode doesn't support ssl client");
+                    case PERMISSIVE:
+                    case ENFORCING:
+                        if (null != sslContext) {
+                            ctx.pipeline()
+                                    .addAfter(defaultEventExecutorGroup, TLS_MODE_HANDLER, TLS_HANDLER_NAME, sslContext.newHandler(ctx.channel().alloc()))
+                                    .addAfter(defaultEventExecutorGroup, TLS_HANDLER_NAME, FILE_REGION_ENCODER_NAME, new FileRegionEncoder());
+                            log.info("Handlers prepended to channel pipeline to establish SSL connection");
+                        } else {
+                            ctx.close();
+                            log.error("Trying to establish an SSL connection but sslContext is null");
+                        }
+                        break;
+
+                    default:
+                        log.warn("Unknown TLS mode");
+                        break;
+                }
+            } else if (tlsMode == TlsMode.ENFORCING) {
+                ctx.close();
+                log.warn("Clients intend to establish an insecure connection while this server is running in SSL enforcing mode");
+            }
+
+            try {
+                // Remove this handler
+                ctx.pipeline().remove(this);
+            } catch (NoSuchElementException e) {
+                log.error("Error while removing TlsModeHandler", e);
+            }
+
+            // Hand over this message to the next .
+            ctx.fireChannelRead(msg.retain());
+        }
+    }
 
     class SubRemotingServer extends NettyRemotingAbstract implements RemotingServer {
         private volatile int listenPort;
