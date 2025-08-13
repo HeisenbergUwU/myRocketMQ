@@ -420,6 +420,12 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
             try {
                 ProtocolDetectionResult<HAProxyProtocolVersion> detectionResult = HAProxyMessageDecoder.detectProtocol(byteBuf);
+                if (detectionResult.state() == ProtocolDetectionState.NEEDS_MORE_DATA) {
+                    return;
+                }
+                if (detectionResult.state() == ProtocolDetectionState.DETECTED) {
+
+                }
             } catch (Exception e) {
                 log.error("process proxy protocol negotiator failed.", e);
                 throw e;
