@@ -49,6 +49,7 @@ import java.net.InetSocketAddress;
 import java.security.cert.CertificateException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -237,11 +238,8 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     }
 
     protected ChannelPipeline configChannel(SocketChannel ch) {
-        return ch.pipeline()
-                .addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null, // 如果是 null 那么则使用 boss 的 EventLoop
-                        HANDSHAKE_HANDLER_NAME, new HandshakeHandler())
-                .addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null,
-                        encoder, new NettyDecoder(), distributionHandler, new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()), connectionManageHandler, serverHandler);
+        return ch.pipeline().addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null, // 如果是 null 那么则使用 boss 的 EventLoop
+                HANDSHAKE_HANDLER_NAME, new HandshakeHandler()).addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null, encoder, new NettyDecoder(), distributionHandler, new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()), connectionManageHandler, serverHandler);
     }
 
     private void addCustomConfig(ServerBootstrap childHandler) {
@@ -379,14 +377,12 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         if (distributionHandler != null) {
             String inBoundSnapshotString = distributionHandler.getInBoundSnapshotString();
             if (inBoundSnapshotString != null) {
-                TRAFFIC_LOGGER.info("Port: {}, RequestCode Distribution: {}",
-                        nettyServerConfig.getListenPort(), inBoundSnapshotString);
+                TRAFFIC_LOGGER.info("Port: {}, RequestCode Distribution: {}", nettyServerConfig.getListenPort(), inBoundSnapshotString);
             }
 
             String outBoundSnapshotString = distributionHandler.getOutBoundSnapshotString();
             if (outBoundSnapshotString != null) {
-                TRAFFIC_LOGGER.info("Port: {}, ResponseCode Distribution: {}",
-                        nettyServerConfig.getListenPort(), outBoundSnapshotString);
+                TRAFFIC_LOGGER.info("Port: {}, ResponseCode Distribution: {}", nettyServerConfig.getListenPort(), outBoundSnapshotString);
             }
         }
     }
@@ -411,20 +407,40 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         return distributionHandler;
     }
 
+    /**
+     * 握手时候需要的 Handler - 你的 Netty 服务器运行在 HAProxy 或类似代理后端，代理服务器负责添加 PROXY 协议头部，实际的客户端（如浏览器、应用程序）无需关心 PROXY 协议。
+     */
     public class HandshakeHandler extends ByteToMessageDecoder {
 
         public HandshakeHandler() {
         }
 
         @Override
-        protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
+        protected void decode(ChannelHandlerContext ctx, ByteBuf byteBuf, List<Object> out) throws Exception {
             try {
-                ProtocolDetectionResult<HAProxyProtocolVersion> detectionResult = HAProxyMessageDecoder.detectProtocol(byteBuf);
-                if (detectionResult.state() == ProtocolDetectionState.NEEDS_MORE_DATA) {
+                ProtocolDetectionResult<HAProxyProtocolVersion> detectionResult = HAProxyMessageDecoder.detectProtocol(byteBuf); // 检测 HAProxy Protocol 的方法
+                if (detectionResult.state() == ProtocolDetectionState.NEEDS_MORE_DATA) { // 数据都不够12bytes
                     return;
                 }
-                if (detectionResult.state() == ProtocolDetectionState.DETECTED) {
+                if (detectionResult.state() == ProtocolDetectionState.DETECTED) { // 检测到
+                    // ctx.name() - 最近的一个 handler 的名字； addAfter 就是在指定的 handler 后面加东西
+                    ctx.pipeline().addAfter(defaultEventExecutorGroup, ctx.name(), HA_PROXY_DECODER, new HAProxyMessageDecoder()).addAfter(defaultEventExecutorGroup, HA_PROXY_DECODER, HA_PROXY_HANDLER, new HAProxyMessageHandler()).addAfter(defaultEventExecutorGroup, HA_PROXY_HANDLER, TLS_MODE_HANDLER, tlsModeHandler);
+                } else {
+                    log.warn("HandshakeHandler with not X-Forward-For.");
+                    ctx.pipeline().addAfter(defaultEventExecutorGroup, ctx.name(), TLS_MODE_HANDLER, tlsModeHandler);
+                }
 
+                try {
+                    /*
+                     * Remove this handler - 握手完毕之后就可以删除了，所有的信息都已经绑定完毕了
+                     *
+                     * ；Netty 本身还有 handlerRemoved0(...)，是在 handler 被移除之后调用（ByteToMessageDecoder 中定义），
+                     * 用于进行最后清理。即便 handler 被移除，remove 操作也确保状态切换和必要的清理逻辑被正确处理（比如调用 handlerRemoved）
+                     */
+                    log.warn("Handshake over, removing **HandshakeHandler**");
+                    ctx.pipeline().remove(this);
+                } catch (NoSuchElementException e) {
+                    log.error("Error while removing HandshakeHandler", e);
                 }
             } catch (Exception e) {
                 log.error("process proxy protocol negotiator failed.", e);
@@ -459,9 +475,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                     case PERMISSIVE:
                     case ENFORCING:
                         if (null != sslContext) {
-                            ctx.pipeline()
-                                    .addAfter(defaultEventExecutorGroup, TLS_MODE_HANDLER, TLS_HANDLER_NAME, sslContext.newHandler(ctx.channel().alloc()))
-                                    .addAfter(defaultEventExecutorGroup, TLS_HANDLER_NAME, FILE_REGION_ENCODER_NAME, new FileRegionEncoder());
+                            ctx.pipeline().addAfter(defaultEventExecutorGroup, TLS_MODE_HANDLER, TLS_HANDLER_NAME, sslContext.newHandler(ctx.channel().alloc())).addAfter(defaultEventExecutorGroup, TLS_HANDLER_NAME, FILE_REGION_ENCODER_NAME, new FileRegionEncoder());
                             log.info("Handlers prepended to channel pipeline to establish SSL connection");
                         } else {
                             ctx.close();
@@ -625,6 +639,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         private void handleWithMessage(HAProxyMessage msg, Channel channel) {
             try {
                 if (StringUtils.isNotBlank(msg.sourceAddress())) {
+                    // 给channel 添加一些属性信息
                     RemotingHelper.setPropertyToAttr(channel, AttributeKeys.PROXY_PROTOCOL_ADDR, msg.sourceAddress());
                 }
                 if (msg.sourcePort() > 0) {
@@ -642,7 +657,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                     });
                 }
             } finally {
-                msg.release();
+                msg.release();  // 因为这里消费完毕了 没有向下传递
             }
         }
     }
