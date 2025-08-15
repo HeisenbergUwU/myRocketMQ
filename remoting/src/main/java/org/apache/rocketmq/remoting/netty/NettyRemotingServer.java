@@ -504,6 +504,61 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    @ChannelHandler.Sharable
+    public class NettyServerHandler extends SimpleChannelInboundHandler<RemotingCommand> {
+        /**
+         * 默认读事件
+         *
+         * @param ctx the {@link ChannelHandlerContext} which this {@link SimpleChannelInboundHandler}
+         *            belongs to
+         * @param msg the message to handle
+         * @throws Exception
+         */
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
+            Integer localPort = RemotingHelper.parseSocketAddressPort(ctx.channel().localAddress());
+            NettyRemotingAbstract remotingAbstract = NettyRemotingServer.this.remotingServerTable.get(localPort);// 绑定的 Server
+            if (localPort != -1 && remotingAbstract != null) {
+                remotingAbstract.processMessageReceived(ctx, msg); // 准备出站传递信息了
+                return;
+            }
+            // The related remoting server has been shutdown, so close the connected channel
+            RemotingHelper.closeChannel(ctx.channel());
+        }
+
+        /**
+         * 可写性事件变化 - 【主要是根据水位上下限决定的】
+         * | 场景                         | 条件                      | 触发行为                               |
+         * | -------------------------- | ----------------------- | ---------------------------------- |
+         * | 变为不可写（writability = false） | 出站缓冲区大小 ≥ HighWaterMark | 调用 `channelWritabilityChanged()`   |
+         * | 变为可写（writability = true）   | 缓冲区大小 ≤ LowWaterMark    | 再次调用 `channelWritabilityChanged()` |
+         * | 写能力没有变化                    | 缓冲区在水位区间内               | 不触发该事件                             |
+         *
+         * @param ctx
+         * @throws Exception
+         */
+        @Override
+        public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
+            Channel channel = ctx.channel();
+            /**
+             * 当 autoRead=true 时，Channel 会在尚未建立连接或者准备好处理数据之前就开始读取。
+             * 设置为 false 后，不会有新的读取操作被自动触发，除非你在代码中通过 ctx.read() 手动调用。只有这样才会继续读取下一条数据
+             */
+            if (channel.isWritable()) { // 缓冲区已经释放到了 “低水位”
+                if (!channel.config().isAutoRead()) {
+                    channel.config().setAutoRead(true); // 这
+                    log.info("Channel[{}] turns writable, bytes to buffer before changing channel to un-writable: {}",
+                            RemotingHelper.parseChannelRemoteAddr(channel), channel.bytesBeforeUnwritable());
+                }
+            } else {
+                channel.config().setAutoRead(false);
+                log.warn("Channel[{}] auto-read is disabled, bytes to drain before it turns writable: {}",
+                        RemotingHelper.parseChannelRemoteAddr(channel), channel.bytesBeforeWritable());
+            }
+            super.channelWritabilityChanged(ctx);
+        }
+    }
+
     class SubRemotingServer extends NettyRemotingAbstract implements RemotingServer {
         private volatile int listenPort;
         private volatile Channel serverChannel;

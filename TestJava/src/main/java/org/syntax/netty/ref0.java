@@ -1,9 +1,7 @@
 package org.syntax.netty;
 
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.SocketChannel;
@@ -16,7 +14,7 @@ import io.netty.util.ResourceLeakDetector;
 public class ref0 {
     public static void main(String[] args) {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.DISABLED);
-        new ServerBootstrap()
+        ChannelFuture channelFuture = new ServerBootstrap()
                 .group(new NioEventLoopGroup(1))
                 .channel(NioServerSocketChannel.class)
                 .childHandler(new ChannelInitializer<SocketChannel>() {
@@ -34,7 +32,9 @@ public class ref0 {
                     }
                 }).bind(8080);
 
+        Channel channel = channelFuture.channel();
 
+        channel.close();
     }
 
 

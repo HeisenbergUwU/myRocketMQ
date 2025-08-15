@@ -21,9 +21,9 @@ public class testClient {
 
                     @Override
                     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-                        System.out.println(((ByteBuf)msg).refCnt());
-                        ReferenceCountUtil.release(msg);
-                        System.out.println(((ByteBuf)msg).refCnt());
+//                        System.out.println(((ByteBuf)msg).refCnt());
+//                        ReferenceCountUtil.release(msg);
+//                        System.out.println(((ByteBuf)msg).refCnt());
                         System.out.println("### MyOutboundHandler: write called, msg = " + msg);
                         // 这里可以对 msg 做编码、日志记录、加密等操作
                         super.write(ctx, msg, promise);
