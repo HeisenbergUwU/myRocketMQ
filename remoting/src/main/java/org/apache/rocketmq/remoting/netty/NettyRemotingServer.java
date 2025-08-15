@@ -546,12 +546,12 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
              */
             if (channel.isWritable()) { // 缓冲区已经释放到了 “低水位”
                 if (!channel.config().isAutoRead()) {
-                    channel.config().setAutoRead(true); // 这
+                    channel.config().setAutoRead(true); // 继续接受 入栈信息
                     log.info("Channel[{}] turns writable, bytes to buffer before changing channel to un-writable: {}",
                             RemotingHelper.parseChannelRemoteAddr(channel), channel.bytesBeforeUnwritable());
                 }
             } else {
-                channel.config().setAutoRead(false);
+                channel.config().setAutoRead(false); // 满了！！ 停停不打啦。。
                 log.warn("Channel[{}] auto-read is disabled, bytes to drain before it turns writable: {}",
                         RemotingHelper.parseChannelRemoteAddr(channel), channel.bytesBeforeWritable());
             }
