@@ -491,6 +491,9 @@ public class RemotingCommand {
         }
     }
 
+    /**
+     *
+     */
     public void makeCustomHeaderToNet() {
         if (this.customHeader != null) {
             Field[] fields = getClazzFields(customHeader.getClass());

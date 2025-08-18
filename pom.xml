@@ -19,6 +19,8 @@
         <module>common</module>
         <module>remoting</module>
         <module>srvutil</module>
+        <module>namesrv</module>
+        <module>client</module>
     </modules>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
