@@ -22,7 +22,7 @@ import java.util.List;
 import org.apache.rocketmq.common.message.MessageQueue;
 
 /**
- * 平均Hash 分配MQ 的策略
+ * 平均分配MQ 的策略
  */
 public class AllocateMessageQueueAveragely extends AbstractAllocateMessageQueueStrategy {
 
@@ -31,12 +31,12 @@ public class AllocateMessageQueueAveragely extends AbstractAllocateMessageQueueS
                                        List<String> cidAll) {
 
         List<MessageQueue> result = new ArrayList<>();
+        // 检测参数有效性
         if (!check(consumerGroup, currentCID, mqAll, cidAll)) {
-            return result;
+            return result; // 直接返回空列表
         }
-
-        int index = cidAll.indexOf(currentCID);
-        int mod = mqAll.size() % cidAll.size();
+        int index = cidAll.indexOf(currentCID); // 得到 currentID 的 索引号
+        int mod = mqAll.size() % cidAll.size(); // 取模
         int averageSize =
                 mqAll.size() <= cidAll.size() ? 1 : (mod > 0 && index < mod ? mqAll.size() / cidAll.size()
                         + 1 : mqAll.size() / cidAll.size());
