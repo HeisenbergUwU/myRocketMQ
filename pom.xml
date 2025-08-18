@@ -6,11 +6,19 @@
     <groupId>org.apache.rocketmq</groupId>
     <artifactId>rocketmq-all</artifactId>
     <version>5.3.3</version>
+
+    <parent>
+        <groupId>org.apache</groupId>
+        <artifactId>apache</artifactId>
+        <version>18</version>
+    </parent>
+
     <packaging>pom</packaging>
     <name>Apache RocketMQ ${project.version}</name>
     <modules>
         <module>common</module>
         <module>remoting</module>
+        <module>srvutil</module>
     </modules>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -110,7 +118,87 @@
         <dependencies>
             <dependency>
                 <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-auth</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-broker</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-client</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
                 <artifactId>rocketmq-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-container</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-controller</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-example</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-filter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-namesrv</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-openmessaging</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-proxy</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-remoting</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-srvutil</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-store</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-tiered-store</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-tools</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -634,7 +722,6 @@
         </dependency>
     </dependencies>
 
-
     <build>
         <plugins>
             <plugin>
@@ -714,53 +801,53 @@
                     </execution>
                 </executions>
             </plugin>
-<!--            <plugin>-->
-<!--                <artifactId>maven-checkstyle-plugin</artifactId>-->
-<!--                <version>${maven-checkstyle-plugin.version}</version>-->
-<!--                <executions>-->
-<!--                    <execution>-->
-<!--                        <id>validate</id>-->
-<!--                        <phase>validate</phase>-->
-<!--                        <configuration>-->
-<!--                            <configLocation>style/rmq_checkstyle.xml</configLocation>-->
-<!--                            <inputEncoding>UTF-8</inputEncoding>-->
-<!--                            <consoleOutput>true</consoleOutput>-->
-<!--                            <failsOnError>true</failsOnError>-->
-<!--                            <includeTestSourceDirectory>true</includeTestSourceDirectory>-->
-<!--                            <excludes>**/generated*/**/*</excludes>-->
-<!--                        </configuration>-->
-<!--                        <goals>-->
-<!--                            <goal>check</goal>-->
-<!--                        </goals>-->
-<!--                    </execution>-->
-<!--                </executions>-->
-<!--            </plugin>-->
-<!--            <plugin>-->
-<!--                <groupId>org.apache.rat</groupId>-->
-<!--                <artifactId>apache-rat-plugin</artifactId>-->
-<!--                <version>${apache-rat-plugin.version}</version>-->
-<!--                <configuration>-->
-<!--                    <excludes>-->
-<!--                        <exclude>.gitignore</exclude>-->
-<!--                        <exclude>.travis.yml</exclude>-->
-<!--                        <exclude>README.md</exclude>-->
-<!--                        <exclude>CONTRIBUTING.md</exclude>-->
-<!--                        <exclude>bin/README.md</exclude>-->
-<!--                        <exclude>.github/**</exclude>-->
-<!--                        <exclude>src/test/resources/**</exclude>-->
-<!--                        <exclude>src/test/resources/certs/*</exclude>-->
-<!--                        <exclude>src/test/**/*.log</exclude>-->
-<!--                        <exclude>src/test/resources/META-INF/services/*</exclude>-->
-<!--                        <exclude>src/main/resources/META-INF/services/*</exclude>-->
-<!--                        <exclude>*/target/**</exclude>-->
-<!--                        <exclude>*/*.iml</exclude>-->
-<!--                        <exclude>docs/**</exclude>-->
-<!--                        <exclude>localbin/**</exclude>-->
-<!--                        <exclude>conf/rmq-proxy.json</exclude>-->
-<!--                        <exclude>.bazelversion</exclude>-->
-<!--                    </excludes>-->
-<!--                </configuration>-->
-<!--            </plugin>-->
+            <!--            <plugin>-->
+            <!--                <artifactId>maven-checkstyle-plugin</artifactId>-->
+            <!--                <version>${maven-checkstyle-plugin.version}</version>-->
+            <!--                <executions>-->
+            <!--                    <execution>-->
+            <!--                        <id>validate</id>-->
+            <!--                        <phase>validate</phase>-->
+            <!--                        <configuration>-->
+            <!--                            <configLocation>style/rmq_checkstyle.xml</configLocation>-->
+            <!--                            <inputEncoding>UTF-8</inputEncoding>-->
+            <!--                            <consoleOutput>true</consoleOutput>-->
+            <!--                            <failsOnError>true</failsOnError>-->
+            <!--                            <includeTestSourceDirectory>true</includeTestSourceDirectory>-->
+            <!--                            <excludes>**/generated*/**/*</excludes>-->
+            <!--                        </configuration>-->
+            <!--                        <goals>-->
+            <!--                            <goal>check</goal>-->
+            <!--                        </goals>-->
+            <!--                    </execution>-->
+            <!--                </executions>-->
+            <!--            </plugin>-->
+            <!--            <plugin>-->
+            <!--                <groupId>org.apache.rat</groupId>-->
+            <!--                <artifactId>apache-rat-plugin</artifactId>-->
+            <!--                <version>${apache-rat-plugin.version}</version>-->
+            <!--                <configuration>-->
+            <!--                    <excludes>-->
+            <!--                        <exclude>.gitignore</exclude>-->
+            <!--                        <exclude>.travis.yml</exclude>-->
+            <!--                        <exclude>README.md</exclude>-->
+            <!--                        <exclude>CONTRIBUTING.md</exclude>-->
+            <!--                        <exclude>bin/README.md</exclude>-->
+            <!--                        <exclude>.github/**</exclude>-->
+            <!--                        <exclude>src/test/resources/**</exclude>-->
+            <!--                        <exclude>src/test/resources/certs/*</exclude>-->
+            <!--                        <exclude>src/test/**/*.log</exclude>-->
+            <!--                        <exclude>src/test/resources/META-INF/services/*</exclude>-->
+            <!--                        <exclude>src/main/resources/META-INF/services/*</exclude>-->
+            <!--                        <exclude>*/target/**</exclude>-->
+            <!--                        <exclude>*/*.iml</exclude>-->
+            <!--                        <exclude>docs/**</exclude>-->
+            <!--                        <exclude>localbin/**</exclude>-->
+            <!--                        <exclude>conf/rmq-proxy.json</exclude>-->
+            <!--                        <exclude>.bazelversion</exclude>-->
+            <!--                    </excludes>-->
+            <!--                </configuration>-->
+            <!--            </plugin>-->
             <plugin>
                 <artifactId>maven-resources-plugin</artifactId>
                 <version>${maven-resources-plugin.version}</version>
@@ -837,28 +924,28 @@
                 <artifactId>sonar-maven-plugin</artifactId>
                 <version>${sonar-maven-plugin.version}</version>
             </plugin>
-<!--            <plugin>-->
-<!--                <groupId>com.github.spotbugs</groupId>-->
-<!--                <artifactId>spotbugs-maven-plugin</artifactId>-->
-<!--                <version>${spotbugs-plugin.version}</version>-->
-<!--                <executions>-->
-<!--                    <execution>-->
-<!--                        <id>check</id>-->
-<!--                        <phase>compile</phase>-->
-<!--                        <goals>-->
-<!--                            <goal>check</goal>-->
-<!--                        </goals>-->
-<!--                    </execution>-->
-<!--                </executions>-->
-<!--                <configuration>-->
-<!--                    <failOnError>true</failOnError>-->
-<!--                    <fork>false</fork>-->
-<!--                    <spotbugsXmlOutput>true</spotbugsXmlOutput>-->
-<!--                    <excludeFilterFile>${project.root}/style/spotbugs-suppressions.xml</excludeFilterFile>-->
-<!--                    <threshold>High</threshold>-->
-<!--                    <effort>Max</effort>-->
-<!--                </configuration>-->
-<!--            </plugin>-->
+            <!--            <plugin>-->
+            <!--                <groupId>com.github.spotbugs</groupId>-->
+            <!--                <artifactId>spotbugs-maven-plugin</artifactId>-->
+            <!--                <version>${spotbugs-plugin.version}</version>-->
+            <!--                <executions>-->
+            <!--                    <execution>-->
+            <!--                        <id>check</id>-->
+            <!--                        <phase>compile</phase>-->
+            <!--                        <goals>-->
+            <!--                            <goal>check</goal>-->
+            <!--                        </goals>-->
+            <!--                    </execution>-->
+            <!--                </executions>-->
+            <!--                <configuration>-->
+            <!--                    <failOnError>true</failOnError>-->
+            <!--                    <fork>false</fork>-->
+            <!--                    <spotbugsXmlOutput>true</spotbugsXmlOutput>-->
+            <!--                    <excludeFilterFile>${project.root}/style/spotbugs-suppressions.xml</excludeFilterFile>-->
+            <!--                    <threshold>High</threshold>-->
+            <!--                    <effort>Max</effort>-->
+            <!--                </configuration>-->
+            <!--            </plugin>-->
         </plugins>
 
         <pluginManagement>

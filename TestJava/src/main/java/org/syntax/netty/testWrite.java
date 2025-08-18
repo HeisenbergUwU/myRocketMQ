@@ -4,11 +4,11 @@ import io.netty.channel.*;
 import io.netty.channel.embedded.EmbeddedChannel;
 
 // 定义两个简单的 Outbound Handler
-class OutboundA extends ChannelOutboundHandlerAdapter {
+class OutboundA extends ChannelInboundHandlerAdapter {
     @Override
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        super.write(ctx, msg, promise);
-        System.out.println("OutboundA processed: " + msg);
+    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        System.out.println(msg);
+        super.channelRead(ctx, msg);
     }
 }
 
