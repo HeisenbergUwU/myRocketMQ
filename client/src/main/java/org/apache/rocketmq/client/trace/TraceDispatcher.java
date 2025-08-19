@@ -14,28 +14,42 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.client.consumer.store;
+package org.apache.rocketmq.client.trace;
 
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicLong;
+import org.apache.rocketmq.client.AccessChannel;
+import org.apache.rocketmq.client.exception.MQClientException;
 
-import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
+import java.io.IOException;
 
 /**
- * Offset 包装对象
+ * Interface of asynchronous transfer data
  */
-public class OffsetSerializeWrapper extends RemotingSerializable {
-    // MQ - Offset 映射表
-    private ConcurrentMap<MessageQueue, AtomicLong> offsetTable =
-            new ConcurrentHashMap<>();
-
-    public ConcurrentMap<MessageQueue, AtomicLong> getOffsetTable() {
-        return offsetTable;
+public interface TraceDispatcher {
+    enum Type {
+        PRODUCE,
+        CONSUME
     }
+    /**
+     * Initialize asynchronous transfer data module
+     */
+    void start(String nameSrvAddr, AccessChannel accessChannel) throws MQClientException;
 
-    public void setOffsetTable(ConcurrentMap<MessageQueue, AtomicLong> offsetTable) {
-        this.offsetTable = offsetTable;
-    }
+    /**
+     * Append the transferring data
+     * @param ctx data information
+     * @return
+     */
+    boolean append(Object ctx);
+
+    /**
+     * Write flush action
+     *
+     * @throws IOException
+     */
+    void flush() throws IOException;
+
+    /**
+     * Close the trace Hook
+     */
+    void shutdown();
 }

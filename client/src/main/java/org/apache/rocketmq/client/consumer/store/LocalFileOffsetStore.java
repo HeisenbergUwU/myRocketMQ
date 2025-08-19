@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+
 import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.impl.factory.MQClientInstance;
@@ -37,28 +38,33 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 /**
- * Local storage implementation
+ * 客户端本地保存 Offset 文件。
  */
 public class LocalFileOffsetStore implements OffsetStore {
     public final static String LOCAL_OFFSET_STORE_DIR = System.getProperty(
-        "rocketmq.client.localOffsetStoreDir",
-        System.getProperty("user.home") + File.separator + ".rocketmq_offsets");
+            "rocketmq.client.localOffsetStoreDir",
+            System.getProperty("user.home") + File.separator + ".rocketmq_offsets"); // 本地的Offset文件保存在哪里
     private final static Logger log = LoggerFactory.getLogger(LocalFileOffsetStore.class);
     private final MQClientInstance mQClientFactory;
     private final String groupName;
     private final String storePath;
     private ConcurrentMap<MessageQueue, ControllableOffset> offsetTable =
-        new ConcurrentHashMap<>();
+            new ConcurrentHashMap<>();
 
     public LocalFileOffsetStore(MQClientInstance mQClientFactory, String groupName) {
         this.mQClientFactory = mQClientFactory;
         this.groupName = groupName;
         this.storePath = LOCAL_OFFSET_STORE_DIR + File.separator +
-            this.mQClientFactory.getClientId() + File.separator +
-            this.groupName + File.separator +
-            "offsets.json";
+                this.mQClientFactory.getClientId() + File.separator +
+                this.groupName + File.separator +
+                "offsets.json";
     }
 
+    /**
+     * 读取本地的Offset文件，并且给他装进 offsetTable 中，偏移量是 ControllableOffset 可控偏移量类型的。
+     *
+     * @throws MQClientException
+     */
     @Override
     public void load() throws MQClientException {
         OffsetSerializeWrapper offsetSerializeWrapper = this.readLocalOffset();
@@ -96,7 +102,7 @@ public class LocalFileOffsetStore implements OffsetStore {
     public void updateAndFreezeOffset(MessageQueue mq, long offset) {
         if (mq != null) {
             this.offsetTable.computeIfAbsent(mq, k -> new ControllableOffset(offset))
-                .updateAndFreeze(offset);
+                    .updateAndFreeze(offset);
         }
     }
 
@@ -203,13 +209,13 @@ public class LocalFileOffsetStore implements OffsetStore {
         if (mq != null) {
             this.offsetTable.remove(mq);
             log.info("remove unnecessary messageQueue offset. group={}, mq={}, offsetTableSize={}", this.groupName, mq,
-                offsetTable.size());
+                    offsetTable.size());
         }
     }
 
     @Override
     public void updateConsumeOffsetToBroker(final MessageQueue mq, final long offset, final boolean isOneway)
-        throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
+            throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
 
     }
 
@@ -222,7 +228,6 @@ public class LocalFileOffsetStore implements OffsetStore {
                 continue;
             }
             cloneOffsetTable.put(mq, entry.getValue().getOffset());
-
         }
         return cloneOffsetTable;
     }
@@ -240,7 +245,7 @@ public class LocalFileOffsetStore implements OffsetStore {
             OffsetSerializeWrapper offsetSerializeWrapper = null;
             try {
                 offsetSerializeWrapper =
-                    OffsetSerializeWrapper.fromJson(content, OffsetSerializeWrapper.class);
+                        OffsetSerializeWrapper.fromJson(content, OffsetSerializeWrapper.class);
             } catch (Exception e) {
                 log.warn("readLocalOffset Exception, and try to correct", e);
                 return this.readLocalOffsetBak();
@@ -250,10 +255,11 @@ public class LocalFileOffsetStore implements OffsetStore {
         }
     }
 
+    // 读一下备份文件
     private OffsetSerializeWrapper readLocalOffsetBak() throws MQClientException {
         String content = null;
         try {
-            content = MixAll.file2String(this.storePath + ".bak");
+            content = MixAll.file2String(this.storePath + ".bak"); // .bak 文件
         } catch (IOException e) {
             log.warn("Load local offset store bak file exception", e);
         }
@@ -261,12 +267,12 @@ public class LocalFileOffsetStore implements OffsetStore {
             OffsetSerializeWrapper offsetSerializeWrapper = null;
             try {
                 offsetSerializeWrapper =
-                    OffsetSerializeWrapper.fromJson(content, OffsetSerializeWrapper.class);
+                        OffsetSerializeWrapper.fromJson(content, OffsetSerializeWrapper.class);
             } catch (Exception e) {
                 log.warn("readLocalOffset Exception", e);
                 throw new MQClientException("readLocalOffset Exception, maybe fastjson version too low"
-                    + FAQUrl.suggestTodo(FAQUrl.LOAD_JSON_EXCEPTION),
-                    e);
+                        + FAQUrl.suggestTodo(FAQUrl.LOAD_JSON_EXCEPTION),
+                        e);
             }
             return offsetSerializeWrapper;
         }

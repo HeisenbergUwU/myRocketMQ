@@ -14,28 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.client.consumer.store;
+package org.apache.rocketmq.client.trace;
 
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicLong;
-
-import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
-
-/**
- * Offset 包装对象
- */
-public class OffsetSerializeWrapper extends RemotingSerializable {
-    // MQ - Offset 映射表
-    private ConcurrentMap<MessageQueue, AtomicLong> offsetTable =
-            new ConcurrentHashMap<>();
-
-    public ConcurrentMap<MessageQueue, AtomicLong> getOffsetTable() {
-        return offsetTable;
-    }
-
-    public void setOffsetTable(ConcurrentMap<MessageQueue, AtomicLong> offsetTable) {
-        this.offsetTable = offsetTable;
-    }
+public enum TraceType {
+    Pub,
+    Recall,
+    SubBefore,
+    SubAfter,
+    EndTransaction,
 }

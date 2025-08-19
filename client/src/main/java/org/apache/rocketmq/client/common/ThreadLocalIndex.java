@@ -2,6 +2,9 @@ package org.apache.rocketmq.client.common;
 
 import java.util.Random;
 
+/**
+ * 线程中维护一个 独立的 index
+ */
 public class ThreadLocalIndex {
     private final ThreadLocal<Integer> threadLocalIndex = new ThreadLocal<>();
     private final Random random = new Random();

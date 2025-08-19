@@ -19,13 +19,15 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.protocol.body.ProcessQueueInfo;
 
 /**
- * Queue consumption snapshot
+ * 消费者队列快照 - 它主要负责存储和管理消息的消费进度、消息的顺序消费、消息的过期处理等功能
  */
 public class ProcessQueue {
+    // 再调整锁的最长时间 30s
     public final static long REBALANCE_LOCK_MAX_LIVE_TIME =
             Long.parseLong(System.getProperty("rocketmq.client.rebalance.lockMaxLiveTime", "30000"));
+    // Rebalance 间隔20s
     public final static long REBALANCE_LOCK_INTERVAL = Long.parseLong(System.getProperty("rocketmq.client.rebalance.lockInterval", "20000"));
-    private final static long PULL_MAX_IDLE_TIME = Long.parseLong(System.getProperty("rocketmq.client.pull.pullMaxIdleTime", "120000"));
+    private final static long PULL_MAX_IDLE_TIME = Long.parseLong(System.getProperty("rocketmq.client.pull.pullMaxIdleTime", "120000")); // 120s 空闲时间
     private final Logger log = LoggerFactory.getLogger(ProcessQueue.class);
     private final ReadWriteLock treeMapLock = new ReentrantReadWriteLock();
     private final TreeMap<Long, MessageExt> msgTreeMap = new TreeMap<>();
