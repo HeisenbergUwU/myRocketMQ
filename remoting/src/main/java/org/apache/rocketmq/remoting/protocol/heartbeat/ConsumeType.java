@@ -22,11 +22,11 @@ package org.apache.rocketmq.remoting.protocol.heartbeat;
 
 public enum ConsumeType {
 
-    CONSUME_ACTIVELY("PULL"),
+    CONSUME_ACTIVELY("PULL"), // 主动拉去消费
 
-    CONSUME_PASSIVELY("PUSH"),
+    CONSUME_PASSIVELY("PUSH"), // 被动推送消费
 
-    CONSUME_POP("POP");
+    CONSUME_POP("POP"); // 全称是 POP (Pop Orderly Polling)
 
     private String typeCN;
 
