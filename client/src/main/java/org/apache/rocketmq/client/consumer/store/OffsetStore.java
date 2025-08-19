@@ -18,65 +18,69 @@ package org.apache.rocketmq.client.consumer.store;
 
 import java.util.Map;
 import java.util.Set;
+
 import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
 /**
- * Offset store interface
+ * offset 保存 接口
  */
 public interface OffsetStore {
     /**
-     * Load
+     * 加载消费进度到内存 - 本地存储使用，远程存储就空实现就行了
      */
     void load() throws MQClientException;
 
     /**
-     * Update the offset,store it in memory
+     * 在内存中更新offset
      */
     void updateOffset(final MessageQueue mq, final long offset, final boolean increaseOnly);
 
     /**
-     * Update and freeze the message queue to prevent concurrent update action
+     * 更偏移量 & 冻结消息队列；防止并发更新冲突
      *
-     * @param mq target message queue
+     * @param mq     target message queue
      * @param offset expect update offset
      */
     void updateAndFreezeOffset(final MessageQueue mq, final long offset);
 
     /**
-     * Get offset from local storage
+     * 读取offset
      *
      * @return The fetched offset
      */
     long readOffset(final MessageQueue mq, final ReadOffsetType type);
 
     /**
-     * Persist all offsets,may be in local storage or remote name server
+     * 将一组MQ 的的消费进度持久化
      */
     void persistAll(final Set<MessageQueue> mqs);
 
     /**
-     * Persist the offset,may be in local storage or remote name server
+     * 将一个MQ的消费进度持久化
      */
     void persist(final MessageQueue mq);
 
     /**
-     * Remove offset
+     * 删除 偏移量
      */
     void removeOffset(MessageQueue mq);
 
     /**
-     * @return The cloned offset table of given topic
+     * 复制偏移量表
      */
     Map<MessageQueue, Long> cloneOffsetTable(String topic);
 
     /**
+     * 将指定队列的消费进度上报给 Broker，
+     * *       支持单向（不等待响应）或双向上报方式。
+     *
      * @param mq
      * @param offset
      * @param isOneway
      */
     void updateConsumeOffsetToBroker(MessageQueue mq, long offset, boolean isOneway) throws RemotingException,
-        MQBrokerException, InterruptedException, MQClientException;
+            MQBrokerException, InterruptedException, MQClientException;
 }

@@ -26,7 +26,7 @@ public enum ReadOffsetType {
      */
     READ_FROM_STORE,
     /**
-     * From memory,then from storage
+     * 先内存，再磁盘
      */
     MEMORY_FIRST_THEN_STORE;
 }

@@ -99,7 +99,7 @@ public interface RemotingClient extends RemotingService {
         CompletableFuture<RemotingCommand> future = new CompletableFuture<>();
         try {
             invokeAsync(addr, request, timeoutMillis, new InvokeCallback() {
-
+                // 下述2种方法成功后才执行。
                 @Override
                 public void operationComplete(ResponseFuture responseFuture) {
 
@@ -108,7 +108,7 @@ public interface RemotingClient extends RemotingService {
                 @Override
                 public void operationSucceed(RemotingCommand response) {
                     future.complete(response);
-                }
+                } // 就算是 complete 也可以继续执行链式操作。
 
                 @Override
                 public void operationFail(Throwable throwable) {

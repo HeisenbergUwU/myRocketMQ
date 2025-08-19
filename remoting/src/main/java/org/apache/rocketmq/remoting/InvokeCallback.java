@@ -16,7 +16,7 @@ public interface InvokeCallback {
     default void operationSucceed(final RemotingCommand response) {
 
     }
-    
+
     default void operationFail(final Throwable throwable) {
 
     }

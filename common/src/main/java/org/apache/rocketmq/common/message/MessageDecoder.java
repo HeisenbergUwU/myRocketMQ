@@ -585,10 +585,7 @@ public class MessageDecoder {
         return decodes(byteBuffer, true);
     }
 
-    public static List<MessageExt> decodesBatch(ByteBuffer byteBuffer,
-                                                final boolean readBody,
-                                                final boolean decompressBody,
-                                                final boolean isClient) {
+    public static List<MessageExt> decodesBatch(ByteBuffer byteBuffer) {
         List<MessageExt> msgExts = new ArrayList<>();
         while (byteBuffer.hasRemaining()) {
             MessageExt msgExt = decode(byteBuffer, readBody, decompressBody, isClient);

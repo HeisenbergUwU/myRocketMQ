@@ -12,6 +12,17 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+/**
+ * 一段式概述：开头即简要说明类职责 —— 用于 HMAC 签名 + Base64 编码，在 RocketMQ 的 ACL 中起到关键作用。
+ * <p>
+ * 功能细节：明确列出默认配置、支持的 API 方法、底层实现流程。
+ * <p>
+ * 容错策略：指出出错时如何处理（日志 + 抛出自定义异常）。
+ * <p>
+ * 上下文说明：强调它在 RocketMQ ACL 认证流程中的位置，为读者提供背景信息。
+ * <p>
+ * 引用文档：引用 RocketMQ 官方 ACL 文档，说明签名机制在权限校验中的作用
+ */
 public class AclSigner {
     public static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
     public static final SigningAlgorithm DEFAULT_ALGORITHM = SigningAlgorithm.HmacSHA1;

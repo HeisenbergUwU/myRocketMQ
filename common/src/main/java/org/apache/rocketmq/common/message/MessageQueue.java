@@ -94,7 +94,7 @@ public class MessageQueue implements Comparable<MessageQueue>, Serializable {
             return false;
         return true;
     }
-
+    // TreeSet 靠这个接口排序
     @Override
     public int compareTo(MessageQueue o) {
         // 函数内部作用域 - pName scope can see

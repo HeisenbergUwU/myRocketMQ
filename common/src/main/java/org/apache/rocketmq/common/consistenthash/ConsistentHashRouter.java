@@ -1,4 +1,4 @@
-package org.apache.rocketmq.common.consistanthash;
+package org.apache.rocketmq.common.consistenthash;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

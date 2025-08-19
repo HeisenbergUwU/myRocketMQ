@@ -17,14 +17,15 @@
 package org.apache.rocketmq.client.consumer.rebalance;
 
 import java.util.List;
-import org.apache.rocketmq.common.message.MessageQueue;
 
+import org.apache.rocketmq.common.message.MessageQueue;
+// 通过配置文件确定如何分配MQ给Consumer
 public class AllocateMessageQueueByConfig extends AbstractAllocateMessageQueueStrategy {
     private List<MessageQueue> messageQueueList;
 
     @Override
     public List<MessageQueue> allocate(String consumerGroup, String currentCID, List<MessageQueue> mqAll,
-        List<String> cidAll) {
+                                       List<String> cidAll) {
         return this.messageQueueList;
     }
 

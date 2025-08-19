@@ -71,6 +71,7 @@ public class ControllableOffset {
      */
     public void update(long target, boolean increaseOnly) {
         if (allowToUpdate) {
+            // cas 操作会带来不断地重试
             value.getAndUpdate(val -> {
                 if (allowToUpdate) {
                     if (increaseOnly) {
@@ -79,6 +80,7 @@ public class ControllableOffset {
                         return target;
                     }
                 } else {
+                    // 不让更新...
                     return val;
                 }
             });
@@ -87,6 +89,7 @@ public class ControllableOffset {
 
     /**
      * Overloaded method for updating the offset value unconditionally.
+     * * 重载方法 update 的只增长为 false，也就是说一直都会更新成为 target 值
      *
      * @param target The new target value for the offset.
      */
@@ -99,12 +102,14 @@ public class ControllableOffset {
      * cannot be updated by subsequent calls to {@link #update(long, boolean)}.
      * This method will set allowToUpdate to false and then update the offset,
      * ensuring the new value is the final state of the offset.
+     * <p>
+     * * 更新并且锁定 value; 直接就冻结了，并没有解锁的意思
      *
      * @param target the new target offset value to freeze at.
      */
     public void updateAndFreeze(long target) {
         value.getAndUpdate(val -> {
-            allowToUpdate = false;
+            allowToUpdate = false; // volatile 修饰
             return target;
         });
     }
