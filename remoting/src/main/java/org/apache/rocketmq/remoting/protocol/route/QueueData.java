@@ -29,7 +29,7 @@ public class QueueData implements Comparable<QueueData> {
     private String brokerName;
     private int readQueueNums;
     private int writeQueueNums;
-    private int perm;
+    private int perm; // 存放权限的
     private int topicSysFlag;
 
     public QueueData() {
@@ -115,10 +115,11 @@ public class QueueData implements Comparable<QueueData> {
     @Override
     public String toString() {
         return "QueueData [brokerName=" + brokerName + ", readQueueNums=" + readQueueNums
-            + ", writeQueueNums=" + writeQueueNums + ", perm=" + perm + ", topicSysFlag=" + topicSysFlag
-            + "]";
+                + ", writeQueueNums=" + writeQueueNums + ", perm=" + perm + ", topicSysFlag=" + topicSysFlag
+                + "]";
     }
 
+    // a negative integer, zero, or a positive integer as this object is less than, equal to, or greater than the specified object.
     @Override
     public int compareTo(QueueData o) {
         return this.brokerName.compareTo(o.getBrokerName());
