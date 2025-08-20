@@ -1,4 +1,4 @@
-package org.apache.rocketmq.client.impl.producer;
+package org.apache.rocketmq.client.producer;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -25,9 +25,6 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
-/**
- * 生产者累加器
- */
 public class ProduceAccumulator {
 
 }
