@@ -2,6 +2,7 @@ package org.apache.rocketmq.client.impl.factory;
 
 import com.alibaba.fastjson.JSON;
 import io.netty.channel.Channel;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.client.ClientConfig;
 import org.apache.rocketmq.client.admin.MQAdminExtInner;
@@ -73,5 +75,38 @@ import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 import static org.apache.rocketmq.remoting.rpc.ClientMetadata.topicRouteData2EndpointsForStaticTopic;
 
 public class MQClientInstance {
+    private final static long LOCK_TIMEOUT_MILLIS = 3000;
+    private final static Logger log = LoggerFactory.getLogger(MQClientInstance.class);
+    private final ClientConfig clientConfig;
+    private final String clientId;
+    private final long bootTimestamp = System.currentTimeMillis();
+
+    /**
+     * 生产者组 - MQ实例的内部调用接口
+     */
+    private final ConcurrentMap<String, MQProducerInner> producerTable = new ConcurrentHashMap<>();
+
+    /**
+     * 消费者组 - MQ消费者内部实现接口
+     */
+    private final ConcurrentMap<String, MQConsumerInner> consumerTable = new ConcurrentHashMap<>();
+
+    /**
+     * 管理员组 - 管理员内部接口调用【空的】
+     */
+    private final ConcurrentMap<String, MQAdminExtInner> adminExtTable = new ConcurrentHashMap<>();
+    private final NettyClientConfig nettyClientConfig;
+    private final MQClientAPIImpl mQClientAPIImpl;
+    private final MQAdminImpl mQAdminImpl;
+    private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String/* Topic */, ConcurrentMap<MessageQueue, String/*brokerName*/>> topicEndPointsTable = new ConcurrentHashMap<>();
+    private final Lock lockNamesrv = new ReentrantLock();
+    private final Lock lockHeartbeat = new ReentrantLock();
+    /**
+     * The container which stores the brokerClusterInfo. The key of the map is the broker name.
+     * And the value is the broker instance list that belongs to the broker cluster.
+     * For the sub map, the key is the id of single broker instance, and the value is the address.
+     */
+    private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = new ConcurrentHashMap<>();
 
 }
