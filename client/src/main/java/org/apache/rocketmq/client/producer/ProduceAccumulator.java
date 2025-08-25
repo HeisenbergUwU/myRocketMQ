@@ -79,6 +79,196 @@ public class ProduceAccumulator {
         }
     }
 
+    private class GuardForAsyncSendService extends ServiceThread {
+        private final String serviceName;
+
+        public GuardForAsyncSendService(String clientInstanceName) {
+            serviceName = String.format("Client_%s_GuardForAsyncSend", clientInstanceName);
+        }
+
+        @Override
+        public String getServiceName() {
+            return serviceName;
+        }
+
+        @Override
+        public void run() {
+            log.info(this.getServiceName() + " service started");
+            while (!this.isStopped()) {
+                try {
+                    this.doWork();
+                } catch (Exception e) {
+                    log.warn(this.getServiceName() + " service has exception. ", e);
+                }
+            }
+
+            log.info(this.getServiceName() + " service end");
+        }
+
+        private void doWork() throws Exception {
+            Collection<MessageAccumulation> values = syncSendBatchs.values();
+            final int sleepTime = Math.max(1, holdMs / 2);
+            for (MessageAccumulation v : values) {
+                if (v.readyToSend()) {
+                    v.send(null);
+                }
+                synchronized (v.closed) {
+                    if (v.messagesSize.get() == 0) {
+                        v.closed.set(true);
+                        asyncSendBatchs.remove(v.aggregateKey, v);
+                    }
+                }
+            }
+            Thread.sleep(sleepTime);
+        }
+    }
+
+
+    void start() {
+        guardThreadForSyncSend.start();
+        guardThreadForAsyncSend.start();
+    }
+
+    void shutdown() {
+        guardThreadForSyncSend.shutdown();
+        guardThreadForAsyncSend.shutdown();
+    }
+
+    int getBatchMaxDelayMs() {
+        return holdMs;
+    }
+
+    void batchMaxDelayMs(int holdMs) {
+        if (holdMs <= 0 || holdMs > 30 * 1000) {
+            throw new IllegalArgumentException(String.format("batchMaxDelayMs expect between 1ms and 30s, but get %d!", holdMs));
+        }
+        this.holdMs = holdMs;
+    }
+
+    long getBatchMaxBytes() {
+        return holdSize;
+    }
+
+    void batchMaxBytes(long holdSize) {
+        if (holdSize <= 0 || holdSize > 2 * 1024 * 1024) {
+            throw new IllegalArgumentException(String.format("batchMaxBytes expect between 1B and 2MB, but get %d!", holdSize));
+        }
+        this.holdSize = holdSize;
+    }
+
+    long getTotalBatchMaxBytes() {
+        return holdSize;
+    }
+
+    void totalBatchMaxBytes(long totalHoldSize) {
+        if (totalHoldSize <= 0) {
+            throw new IllegalArgumentException(String.format("totalBatchMaxBytes must bigger then 0, but get %d!", totalHoldSize));
+        }
+        this.totalHoldSize = totalHoldSize;
+    }
+
+    /**
+     * 这一系列 send(...) 方法确实并没有真正立即向 RocketMQ Broker 发送消息，
+     * 而是将消息存入了一个“累积器”里（MessageAccumulation 容器）——等待满足某些条件（例如消息体积或等待时间）后，才统一调用 send() 方法发送批量消息。
+     *
+     * @param aggregateKey
+     * @param defaultMQProducer
+     * @return
+     */
+    private MessageAccumulation getOrCreateSyncSendBatch(AggregateKey aggregateKey,
+                                                         DefaultMQProducer defaultMQProducer) {
+        MessageAccumulation batch = syncSendBatchs.get(aggregateKey);
+        if (batch != null) {
+            return batch;
+        }
+        batch = new MessageAccumulation(aggregateKey, defaultMQProducer);
+        MessageAccumulation previous = syncSendBatchs.putIfAbsent(aggregateKey, batch);
+
+        return previous == null ? batch : previous;
+    }
+
+    private MessageAccumulation getOrCreateAsyncSendBatch(AggregateKey aggregateKey,
+                                                          DefaultMQProducer defaultMQProducer) {
+        MessageAccumulation batch = asyncSendBatchs.get(aggregateKey);
+        if (batch != null) {
+            return batch;
+        }
+        batch = new MessageAccumulation(aggregateKey, defaultMQProducer);
+        MessageAccumulation previous = asyncSendBatchs.putIfAbsent(aggregateKey, batch);
+
+        return previous == null ? batch : previous;
+    }
+
+    SendResult send(Message msg,
+                    DefaultMQProducer defaultMQProducer) throws InterruptedException, MQBrokerException, RemotingException, MQClientException {
+        AggregateKey partitionKey = new AggregateKey(msg);
+        while (true) {
+            MessageAccumulation batch = getOrCreateSyncSendBatch(partitionKey, defaultMQProducer);
+            int index = batch.add(msg);
+            if (index == -1) {
+                syncSendBatchs.remove(partitionKey, batch);
+            } else {
+                return batch.sendResults[index];
+            }
+        }
+    }
+
+    SendResult send(Message msg, MessageQueue mq,
+                    DefaultMQProducer defaultMQProducer) throws InterruptedException, MQBrokerException, RemotingException, MQClientException {
+        AggregateKey partitionKey = new AggregateKey(msg, mq);
+        while (true) {
+            MessageAccumulation batch = getOrCreateSyncSendBatch(partitionKey, defaultMQProducer);
+            int index = batch.add(msg);
+            if (index == -1) {
+                syncSendBatchs.remove(partitionKey, batch);
+            } else {
+                return batch.sendResults[index];
+            }
+        }
+    }
+
+    void send(Message msg, SendCallback sendCallback,
+              DefaultMQProducer defaultMQProducer) throws InterruptedException, RemotingException, MQClientException {
+        AggregateKey partitionKey = new AggregateKey(msg);
+        while (true) {
+            MessageAccumulation batch = getOrCreateAsyncSendBatch(partitionKey, defaultMQProducer);
+            if (!batch.add(msg, sendCallback)) {
+                asyncSendBatchs.remove(partitionKey, batch);
+            } else {
+                return;
+            }
+        }
+    }
+
+    void send(Message msg, MessageQueue mq,
+              SendCallback sendCallback,
+              DefaultMQProducer defaultMQProducer) throws InterruptedException, RemotingException, MQClientException {
+        AggregateKey partitionKey = new AggregateKey(msg, mq);
+        while (true) {
+            MessageAccumulation batch = getOrCreateAsyncSendBatch(partitionKey, defaultMQProducer);
+            if (!batch.add(msg, sendCallback)) {
+                asyncSendBatchs.remove(partitionKey, batch);
+            } else {
+                return;
+            }
+        }
+    }
+
+    boolean tryAddMessage(Message message) {
+        synchronized (currentlyHoldSize) {
+            if (currentlyHoldSize.get() < totalHoldSize) {
+                int bodySize = null == message.getBody() ? 0 : message.getBody().length;
+                if (bodySize > 0) {
+                    currentlyHoldSize.addAndGet(bodySize);
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+
     /**
      * 用于标识消息队列的复合键类型，通常用于缓存、去重、批处理等场景。
      * 将关键的属性信息组合成为一个唯一的标识符，一遍 Map or Set 进行高效的查找去重等工作。
@@ -143,12 +333,179 @@ public class ProduceAccumulator {
             this.createTime = System.currentTimeMillis();
         }
 
+        // 到达一定的数量，并且时间间隔达到要求
         private boolean readyToSend() {
             if (this.messagesSize.get() > holdSize || System.currentTimeMillis() >= this.createTime + holdMs) {
                 return true;
             }
             return false;
         }
+
+
+        public int add(Message msg) throws InterruptedException, MQBrokerException, RemotingException, MQClientException {
+            int ret = -1;
+            // 消息累加器竞争很低，多数只有一个线程在使用，synchronized的效率反而更高。
+            synchronized (this.closed) {
+                if (this.closed.get()) {
+                    return ret;
+                }
+                ret = this.count++;
+                this.messages.add(msg);
+                int bodySize = null == msg.getBody() ? 0 : msg.getBody().length;
+                if (bodySize > 0) {
+                    messagesSize.addAndGet(bodySize);
+                }
+                String msgKeys = msg.getKeys(); // 业务属性 tags
+                if (msgKeys != null) {
+                    this.keys.addAll(Arrays.asList(msgKeys.split(MessageConst.KEY_SEPARATOR)));
+                }
+            }
+            synchronized (this) {
+                while (!this.closed.get()) {
+                    if (readyToSend()) {
+                        this.send();
+                        break;
+                    } else {
+                        this.wait(); // 让出同步占用 - 这里锁的是 this
+                    }
+                }
+            }
+            return ret;
+        }
+
+        public boolean add(Message msg,
+                           SendCallback sendCallback) throws InterruptedException, RemotingException, MQClientException {
+            synchronized (this.closed) {
+                if (this.closed.get()) {
+                    return false;
+                }
+                this.count++;
+                this.messages.add(msg);
+                this.sendCallbacks.add(sendCallback);
+                int bodySize = null == msg.getBody() ? 0 : msg.getBody().length;
+                if (bodySize > 0) {
+                    messagesSize.addAndGet(bodySize);
+                }
+            }
+            if (readyToSend()) {
+                this.send(sendCallback);
+            }
+            return true;
+        }
+
+        public synchronized void wakeup() {
+            if (this.closed.get()) {
+                return;
+            }
+            this.notify();
+        }
+
+        private MessageBatch batch() {
+            MessageBatch messageBatch = new MessageBatch(this.messages);
+            messageBatch.setTopic(this.aggregateKey.topic);
+            messageBatch.setWaitStoreMsgOK(this.aggregateKey.waitStoreMsgOK);
+            messageBatch.setKeys(this.keys);
+            messageBatch.setTags(this.aggregateKey.tag);
+            MessageClientIDSetter.setUniqID(messageBatch);
+            messageBatch.setBody(MessageDecoder.encodeMessages(this.messages));
+            return messageBatch;
+        }
+
+
+        private void splitSendResults(SendResult sendResult) {
+            if (sendResult == null) {
+                throw new IllegalArgumentException("sendResult is null");
+            }
+            boolean isBatchConsumerQueue = !sendResult.getMsgId().contains(",");
+            this.sendResults = new SendResult[this.count];
+            if (!isBatchConsumerQueue) {
+                String[] msgIds = sendResult.getMsgId().split(",");
+                String[] offsetMsgIds = sendResult.getOffsetMsgId().split(",");
+                if (offsetMsgIds.length != this.count || msgIds.length != this.count) {
+                    throw new IllegalArgumentException("sendResult is illegal");
+                }
+                for (int i = 0; i < this.count; i++) {
+                    this.sendResults[i] = new SendResult(sendResult.getSendStatus(), msgIds[i],
+                            sendResult.getMessageQueue(), sendResult.getQueueOffset() + i,
+                            sendResult.getTransactionId(), offsetMsgIds[i], sendResult.getRegionId());
+                }
+            } else {
+                for (int i = 0; i < this.count; i++) {
+                    this.sendResults[i] = sendResult;
+                }
+            }
+        }
+
+        private void send() throws InterruptedException, MQClientException, MQBrokerException, RemotingException {
+            synchronized (this.closed) {
+                if (this.closed.getAndSet(true)) {
+                    return;
+                }
+            }
+            MessageBatch messageBatch = this.batch();
+            SendResult sendResult = null;
+            try {
+                if (defaultMQProducer != null) {
+                    sendResult = defaultMQProducer.sendDirect(messageBatch, aggregateKey.mq, null);
+                    this.splitSendResults(sendResult);
+                } else {
+                    throw new IllegalArgumentException("defaultMQProducer is null, can not send message");
+                }
+            } finally {
+                currentlyHoldSize.addAndGet(-messagesSize.get());
+                this.notifyAll();
+            }
+        }
+
+        private void send(SendCallback sendCallback) {
+            synchronized (this.closed) {
+                if (this.closed.getAndSet(true)) {
+                    return;
+                }
+            }
+            MessageBatch messageBatch = this.batch();
+            SendResult sendResult = null;
+            try {
+                if (defaultMQProducer != null) {
+                    final int size = messagesSize.get();
+                    defaultMQProducer.sendDirect(messageBatch, aggregateKey.mq, new SendCallback() {
+                        @Override
+                        public void onSuccess(SendResult sendResult) {
+                            try {
+                                splitSendResults(sendResult);
+                                int i = 0;
+                                Iterator<SendCallback> it = sendCallbacks.iterator();
+                                while (it.hasNext()) {
+                                    SendCallback v = it.next();
+                                    v.onSuccess(sendResults[i++]);
+                                }
+                                if (i != count) {
+                                    throw new IllegalArgumentException("sendResult is illegal");
+                                }
+                                currentlyHoldSize.addAndGet(-size);
+                            } catch (Exception e) {
+                                onException(e);
+                            }
+                        }
+
+                        @Override
+                        public void onException(Throwable e) {
+                            for (SendCallback v : sendCallbacks) {
+                                v.onException(e);
+                            }
+                            currentlyHoldSize.addAndGet(-size);
+                        }
+                    });
+                } else {
+                    throw new IllegalArgumentException("defaultMQProducer is null, can not send message");
+                }
+            } catch (Exception e) {
+                for (SendCallback v : sendCallbacks) {
+                    v.onException(e);
+                }
+            }
+        }
     }
+
 
 }
