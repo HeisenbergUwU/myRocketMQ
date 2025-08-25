@@ -100,9 +100,10 @@ public class MQClientInstance {
     private final MQAdminImpl mQAdminImpl;
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<>();
     private final ConcurrentMap<String/* Topic */, ConcurrentMap<MessageQueue, String/*brokerName*/>> topicEndPointsTable = new ConcurrentHashMap<>();
-    private final Lock lockNamesrv = new ReentrantLock();
-    private final Lock lockHeartbeat = new ReentrantLock();
+    private final Lock lockNamesrv = new ReentrantLock(); // ns 锁
+    private final Lock lockHeartbeat = new ReentrantLock(); // 心跳锁
     /**
+     * brokerName - [brokerId - brokerAddr] 也是一个联合表
      * The container which stores the brokerClusterInfo. The key of the map is the broker name.
      * And the value is the broker instance list that belongs to the broker cluster.
      * For the sub map, the key is the id of single broker instance, and the value is the address.
