@@ -134,7 +134,7 @@ public class ProcessQueue {
                         msgSize.addAndGet(null == msg.getBody() ? 0 : msg.getBody().length);
                     }
                 }
-                msgCount.addAndGet(validMsgCnt);
+                msgCount.addAndGet(validMsgCnt); // 更新 msgCount ， validMsgCnt 是写锁循环中的累加变量
 
                 if (!msgTreeMap.isEmpty() && !this.consuming) {
                     dispatchToConsume = true;
@@ -162,18 +162,6 @@ public class ProcessQueue {
     }
 
     public long getMaxSpan() {
-        try {
-            this.treeMapLock.readLock().lockInterruptibly();
-            try {
-                if (!this.msgTreeMap.isEmpty()) {
-                    return this.msgTreeMap.lastKey() - this.msgTreeMap.firstKey();
-                }
-            } finally {
-                this.treeMapLock.readLock().unlock();
-            }
-        } catch (InterruptedException e) {
-            log.error("getMaxSpan exception", e);
-        }
 
         return 0;
     }
