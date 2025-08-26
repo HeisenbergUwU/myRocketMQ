@@ -38,12 +38,12 @@ public class ProcessQueue {
     private final static long PULL_MAX_IDLE_TIME = Long.parseLong(System.getProperty("rocketmq.client.pull.pullMaxIdleTime", "120000")); // 120s 空闲时间
     private final Logger log = LoggerFactory.getLogger(ProcessQueue.class);
     private final ReadWriteLock treeMapLock = new ReentrantReadWriteLock();
-    private final TreeMap<Long, MessageExt> msgTreeMap = new TreeMap<>();
+    private final TreeMap<Long, MessageExt> msgTreeMap = new TreeMap<>(); // 保存下拉但是还没有消费的信息
     private final AtomicLong msgCount = new AtomicLong();
-    private final AtomicLong msgSize = new AtomicLong();
+    private final AtomicLong msgSize = new AtomicLong(); // 只记录msgBody的字节长度
     private final ReadWriteLock consumeLock = new ReentrantReadWriteLock();
     /**
-     * A subset of msgTreeMap, will only be used when orderly consume
+     * A subset of msgTreeMap, will only be used when orderly consume - 只在顺序消费的时候才使用
      */
     private final TreeMap<Long, MessageExt> consumingMsgOrderlyTreeMap = new TreeMap<>();
     private final AtomicLong tryUnlockTimes = new AtomicLong(0);
@@ -65,6 +65,8 @@ public class ProcessQueue {
     }
 
     /**
+     * 清理过期消息
+     *
      * @param pushConsumer
      */
     public void cleanExpiredMsg(DefaultMQPushConsumer pushConsumer) {
@@ -72,7 +74,7 @@ public class ProcessQueue {
             return;
         }
 
-        int loop = Math.min(msgTreeMap.size(), 16);
+        int loop = Math.min(msgTreeMap.size(), 16); // 避免过多的执行这个操作
         for (int i = 0; i < loop; i++) {
             MessageExt msg = null;
             try {
@@ -90,19 +92,16 @@ public class ProcessQueue {
             } catch (InterruptedException e) {
                 log.error("getExpiredMsg exception", e);
             }
-
             if (msg == null) {
                 break;
             }
-
             try {
-
-                pushConsumer.sendMessageBack(msg, 3);
+                pushConsumer.sendMessageBack(msg, 3); // 3次重试，如果再次失败
                 log.info("send expire msg back. topic={}, msgId={}, storeHost={}, queueId={}, queueOffset={}", msg.getTopic(), msg.getMsgId(), msg.getStoreHost(), msg.getQueueId(), msg.getQueueOffset());
                 try {
                     this.treeMapLock.writeLock().lockInterruptibly();
                     try {
-                        if (!msgTreeMap.isEmpty() && msg.getQueueOffset() == msgTreeMap.firstKey()) {
+                        if (!msgTreeMap.isEmpty() && msg.getQueueOffset() == msgTreeMap.firstKey()) { // 这里防止其他线程已经操作过 最近的 msg了
                             try {
                                 removeMessage(Collections.singletonList(msg));
                             } catch (Exception e) {
@@ -128,7 +127,7 @@ public class ProcessQueue {
             try {
                 int validMsgCnt = 0;
                 for (MessageExt msg : msgs) {
-                    MessageExt old = msgTreeMap.put(msg.getQueueOffset(), msg);
+                    MessageExt old = msgTreeMap.put(msg.getQueueOffset(), msg); // 是否存在该信息
                     if (null == old) {
                         validMsgCnt++;
                         this.queueOffsetMax = msg.getQueueOffset();

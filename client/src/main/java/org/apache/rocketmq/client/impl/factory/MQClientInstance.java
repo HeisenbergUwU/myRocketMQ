@@ -104,10 +104,105 @@ public class MQClientInstance {
     private final Lock lockHeartbeat = new ReentrantLock(); // 心跳锁
     /**
      * brokerName - [brokerId - brokerAddr] 也是一个联合表
-     * The container which stores the brokerClusterInfo. The key of the map is the broker name.
-     * And the value is the broker instance list that belongs to the broker cluster.
-     * For the sub map, the key is the id of single broker instance, and the value is the address.
      */
     private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable = new ConcurrentHashMap<>();
+    private final Set<String/* Broker address */> brokerSupportV2HeartbeatSet = new HashSet<>();
+    private final ConcurrentMap<String, Integer> brokerAddrHeartbeatFingerprintTable = new ConcurrentHashMap<>(); // addr - 数字签名
+    // NS 地址更新，topic 路由，清理离线broker，上报客户端心跳
+    private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, "MQClientFactoryScheduledThread")); // lambda 托管 ThreadFactory
+    private final ScheduledExecutorService fetchRemoteConfigExecutorService = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, "MQClientFactoryFetchRemoteConfigScheduledThread"));
+    // 这里并不存在循环引用的问题 loop
+    private final PullMessageService pullMessageService;
+    private final RebalanceService rebalanceService;
+    private final DefaultMQProducer defaultMQProducer;
+    private final ConsumerStatsManager consumerStatsManager;
+    private final AtomicLong sendHeartbeatTimesTotal = new AtomicLong(0);
+    private ServiceState serviceState = ServiceState.CREATE_JUST;
+    private final Random random = new Random();
+
+    public MQClientInstance(ClientConfig clientConfig, int instanceIndex, String clientId) {
+        this(clientConfig, instanceIndex, clientId, null);
+    }
+
+
+    public MQClientInstance(ClientConfig clientConfig, int instanceIndex, String clientId, RPCHook rpcHook) {
+        this.clientConfig = clientConfig;
+        this.nettyClientConfig = new NettyClientConfig();
+        this.nettyClientConfig.setClientCallbackExecutorThreads(clientConfig.getClientCallbackExecutorThreads());
+        this.nettyClientConfig.setUseTLS(clientConfig.isUseTLS());
+        this.nettyClientConfig.setSocksProxyConfig(clientConfig.getSocksProxyConfig());
+        this.nettyClientConfig.setScanAvailableNameSrv(false);
+        ClientRemotingProcessor clientRemotingProcessor = new ClientRemotingProcessor(this);
+        ChannelEventListener channelEventListener;
+        if (clientConfig.isEnableHeartbeatChannelEventListener()) {
+            channelEventListener = new ChannelEventListener() {
+
+                private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = MQClientInstance.this.brokerAddrTable;
+
+                @Override
+                public void onChannelConnect(String remoteAddr, Channel channel) {
+                }
+
+                @Override
+                public void onChannelClose(String remoteAddr, Channel channel) {
+                }
+
+                @Override
+                public void onChannelException(String remoteAddr, Channel channel) {
+                }
+
+                @Override
+                public void onChannelIdle(String remoteAddr, Channel channel) {
+                }
+
+                @Override
+                public void onChannelActive(String remoteAddr, Channel channel) {
+                    for (Map.Entry<String, HashMap<Long, String>> addressEntry : brokerAddrTable.entrySet()) {
+                        for (Map.Entry<Long, String> entry : addressEntry.getValue().entrySet()) {
+                            String addr = entry.getValue();
+                            if (addr.equals(remoteAddr)) {
+                                long id = entry.getKey();
+                                String brokerName = addressEntry.getKey();
+                                if (sendHeartbeatToBroker(id, brokerName, addr, false)) {
+                                    rebalanceImmediately();
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            };
+        } else {
+            channelEventListener = null;
+        }
+        this.mQClientAPIImpl = new MQClientAPIImpl(this.nettyClientConfig, clientRemotingProcessor, rpcHook, clientConfig, channelEventListener);
+
+        if (this.clientConfig.getNamesrvAddr() != null) {
+            this.mQClientAPIImpl.updateNameServerAddressList(this.clientConfig.getNamesrvAddr());
+            log.info("user specified name server address: {}", this.clientConfig.getNamesrvAddr());
+        }
+
+        this.clientId = clientId;
+
+        this.mQAdminImpl = new MQAdminImpl(this);
+
+        this.pullMessageService = new PullMessageService(this); // 初始化 PullMessageService 的时候传入的 MQClientInstance 是我们初始化的 this
+
+        this.rebalanceService = new RebalanceService(this);
+
+        this.defaultMQProducer = new DefaultMQProducer(MixAll.CLIENT_INNER_PRODUCER_GROUP);
+        this.defaultMQProducer.resetClientConfig(clientConfig);
+
+        this.consumerStatsManager = new ConsumerStatsManager(this.scheduledExecutorService);
+
+        log.info("Created a new client Instance, InstanceIndex:{}, ClientID:{}, ClientConfig:{}, ClientVersion:{}, SerializerType:{}",
+                instanceIndex,
+                this.clientId,
+                this.clientConfig,
+                MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION), RemotingCommand.getSerializeTypeConfigInThisServer());
+    }
+
+
 
 }
