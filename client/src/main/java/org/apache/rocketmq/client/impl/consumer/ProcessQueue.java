@@ -161,8 +161,24 @@ public class ProcessQueue {
         return dispatchToConsume;
     }
 
+    /**
+     * 计算队列的Offset 长度
+     *
+     * @return
+     */
     public long getMaxSpan() {
-
+        try {
+            this.treeMapLock.readLock().lockInterruptibly();
+            try {
+                if (!this.msgTreeMap.isEmpty()) {
+                    return this.msgTreeMap.lastKey() - this.msgTreeMap.firstKey();
+                }
+            } finally {
+                this.treeMapLock.readLock().unlock();
+            }
+        } catch (InterruptedException e) {
+            log.error("getMaxSpan exception", e);
+        }
         return 0;
     }
 
@@ -178,7 +194,7 @@ public class ProcessQueue {
                     int removedCnt = 0;
                     for (MessageExt msg : msgs) {
                         MessageExt prev = msgTreeMap.remove(msg.getQueueOffset());
-                        if (prev != null) {
+                        if (prev != null) { // 如果 msgTreeMap 有这个被删除的变量【K是offset】
                             removedCnt--;
                             long bodySize = null == msg.getBody() ? 0 : msg.getBody().length;
                             if (bodySize > 0) {
