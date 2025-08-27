@@ -44,13 +44,6 @@ public abstract class RemotingSerializable {
         }
         return fromJson(data, classOfT);
     }
-// 这是不合法的。
-//    public static <?> ? decode(final byte[] data, Class<?> classOfT) {
-//        if (data == null) {
-//            return null;
-//        }
-//        return fromJson(data, classOfT);
-//    }
 
     public static <T> List<T> decodeList(final byte[] data, Class<T> classOfT) {
         if (data == null) {

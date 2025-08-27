@@ -74,6 +74,10 @@ import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 
 import static org.apache.rocketmq.remoting.rpc.ClientMetadata.topicRouteData2EndpointsForStaticTopic;
 
+/**
+ * Apache RocketMQ 客户端的核心管理类。它扮演着一个客户端工厂和运行时上下文的角色，
+ * 负责管理和协调一个 RocketMQ 客户端实例（可以是生产者、消费者或两者兼有）的所有活动。
+ */
 public class MQClientInstance {
     private final static long LOCK_TIMEOUT_MILLIS = 3000;
     private final static Logger log = LoggerFactory.getLogger(MQClientInstance.class);
@@ -124,7 +128,6 @@ public class MQClientInstance {
     public MQClientInstance(ClientConfig clientConfig, int instanceIndex, String clientId) {
         this(clientConfig, instanceIndex, clientId, null);
     }
-
 
     public MQClientInstance(ClientConfig clientConfig, int instanceIndex, String clientId, RPCHook rpcHook) {
         this.clientConfig = clientConfig;
@@ -204,5 +207,5 @@ public class MQClientInstance {
     }
 
 
-
+    // ‼️ -- CURSOR
 }
