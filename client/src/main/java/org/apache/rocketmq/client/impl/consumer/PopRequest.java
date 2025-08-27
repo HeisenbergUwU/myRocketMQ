@@ -10,7 +10,7 @@ import org.apache.rocketmq.common.message.MessageRequestMode;
 public class PopRequest implements MessageRequest {
     private String topic;
     private String consumerGroup;
-    private MessageQueue messageQueue;
+    private MessageQueue messageQueue; // MQ 元信息
     private PopProcessQueue popProcessQueue;
     private boolean lockedFirst = false;
     private int initMode = ConsumeInitMode.MAX;

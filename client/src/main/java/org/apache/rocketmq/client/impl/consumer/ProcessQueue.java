@@ -19,16 +19,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.protocol.body.ProcessQueueInfo;
 
 /**
- * 消费者队列快照 - 它主要负责存储和管理消息的消费进度、消息的顺序消费、消息的过期处理等功能
- * <p>
- * | 特性     | PULL 模式          | POP 模式           |
- * | ------ | ---------------- | ---------------- |
- * | 消息获取方式 | 消费者主动拉取          | Broker 主动推送      |
- * | 实时性    | 较低，取决于拉取频率       | 高，消息到达即推送        |
- * | 控制粒度   | 精细，消费者可控制拉取频率和数量 | 粗略，由 Broker 控制分配 |
- * | 客户端状态  | 需要维护消息队列的状态      | 无状态，简化客户端实现      |
- * | 实现复杂度  | 较低，逻辑简单          | 较高，需要维护连接和负载均衡机制 |
- * | 适用场景   | 处理能力有限、对延迟敏感的场景  | 实时处理、负载均衡要求高的场景  |
+ * 消费者端在本地内存中维护的一个“消息处理队列”的快照和管理器，它对应于 Broker 上的一个 MessageQueue，但不是那个 MessageQueue 本身。
  */
 public class ProcessQueue {
     // 再调整锁的最长时间 30s

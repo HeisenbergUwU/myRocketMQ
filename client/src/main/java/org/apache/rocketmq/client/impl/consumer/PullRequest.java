@@ -6,7 +6,7 @@ import org.apache.rocketmq.common.message.MessageRequestMode;
 public class PullRequest implements MessageRequest {
     private String consumerGroup; // 消费者组
     private MessageQueue messageQueue; // MQ 元信息
-    private ProcessQueue processQueue; //
+    private ProcessQueue processQueue; // 承载信息的具体队列
     private long nextOffset;
     private boolean previouslyLocked = false;
 
