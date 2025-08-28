@@ -251,7 +251,12 @@ public class MQClientInstance {
 
         List<String> nsList = this.mQClientAPIImpl.getRemotingClient().getNameServerAddressList();
 
-        StringBuilder stringBuilder = new StringBuilder();
+        StringBuilder strBuilder = new StringBuilder();
+        if (nsList != null) {
+            for (String addr : nsList) {
+                strBuilder.append(addr).append(";"); // 拼接ns字符串 -- 192.168.0.1:9876;192.168.0.2:9876;192.168.0.3:9876;
+            }
+        }
     }
 
     public void rebalanceImmediately() {

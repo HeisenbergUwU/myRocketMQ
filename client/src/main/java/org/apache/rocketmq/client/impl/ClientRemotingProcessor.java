@@ -44,7 +44,14 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 /**
- * 处理远端管理类请求组件
+ * 处理远端管理类请求组件 - 确切的说是 broker 向 consumer 发起请求之后本地做的一些调用
+ * - 那么谁能控制 broker 呢？
+ * 1. mqadmin 工具
+ * 2. ns 间接协调
+ * 3. RocketMQ 5.0+ 引入了 Controller 架构（类似 Kafka Controller），这是一个重大变革：
+ * 新增一个独立服务：Controller Server
+ * 它统一管理所有 Broker 的状态、副本同步、主从切换、故障恢复等
+ * 支持 多副本、高可用、自动容灾
  */
 public class ClientRemotingProcessor implements NettyRequestProcessor {
     private final Logger logger = LoggerFactory.getLogger(ClientRemotingProcessor.class);
@@ -241,4 +248,21 @@ public class ClientRemotingProcessor implements NettyRequestProcessor {
         }
         return null;
     }
+
+    public RemotingCommand resetOffset(ChannelHandlerContext ctx,
+                                       RemotingCommand request) throws RemotingCommandException {
+        final ResetOffsetRequestHeader requestHeader =
+                (ResetOffsetRequestHeader) request.decodeCommandCustomHeader(ResetOffsetRequestHeader.class);
+        logger.info("invoke reset offset operation from broker. brokerAddr={}, topic={}, group={}, timestamp={}",
+                RemotingHelper.parseChannelRemoteAddr(ctx.channel()), requestHeader.getTopic(), requestHeader.getGroup(),
+                requestHeader.getTimestamp());
+        Map<MessageQueue, Long> offsetTable = new HashMap<>();
+        if (request.getBody() != null) {
+            ResetOffsetBody body = ResetOffsetBody.decode(request.getBody(), ResetOffsetBody.class);
+            offsetTable = body.getOffsetTable();
+        }
+        this.mqClientFactory.resetOffset(requestHeader.getTopic(), requestHeader.getGroup(), offsetTable);
+        return null;
+    }
+
 }
