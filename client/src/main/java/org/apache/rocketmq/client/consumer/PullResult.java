@@ -17,8 +17,12 @@
 package org.apache.rocketmq.client.consumer;
 
 import java.util.List;
+
 import org.apache.rocketmq.common.message.MessageExt;
 
+/**
+ * RocketMQ 消费者拉取消息后，从 Broker 得到的最核心的响应结
+ */
 public class PullResult {
     private final PullStatus pullStatus;
     private final long nextBeginOffset;
@@ -28,7 +32,7 @@ public class PullResult {
 
 
     public PullResult(PullStatus pullStatus, long nextBeginOffset, long minOffset, long maxOffset,
-        List<MessageExt> msgFoundList) {
+                      List<MessageExt> msgFoundList) {
         super();
         this.pullStatus = pullStatus;
         this.nextBeginOffset = nextBeginOffset;
@@ -64,7 +68,7 @@ public class PullResult {
     @Override
     public String toString() {
         return "PullResult [pullStatus=" + pullStatus + ", nextBeginOffset=" + nextBeginOffset
-            + ", minOffset=" + minOffset + ", maxOffset=" + maxOffset + ", msgFoundList="
-            + (msgFoundList == null ? 0 : msgFoundList.size()) + "]";
+                + ", minOffset=" + minOffset + ", maxOffset=" + maxOffset + ", msgFoundList="
+                + (msgFoundList == null ? 0 : msgFoundList.size()) + "]";
     }
 }

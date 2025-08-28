@@ -5,7 +5,7 @@ import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 
 public class AQSTest {
     public static void main(String[] args) throws InterruptedException {
-        CountDownLatch2 diyLock = new CountDownLatch2(2);
+        CountDownLatch2 diyLock = new CountDownLatch2(1);
         new Thread(() -> {
             try {
                 diyLock.await();
@@ -114,7 +114,8 @@ class CountDownLatch2 {
 
 
     public void countDown() {
-        sync.releaseShared(1);
+        boolean b = sync.releaseShared(1);
+        System.out.println(b);
     }
 
 
@@ -144,7 +145,7 @@ class CountDownLatch2 {
 
         @Override
         protected int tryAcquireShared(int arg) {
-            return (getState() == 0) ? 1 : -1;
+            return (getState() == 0) ? 1 : -1; // count down 到 0 的时候同意放行
         }
 
         @Override

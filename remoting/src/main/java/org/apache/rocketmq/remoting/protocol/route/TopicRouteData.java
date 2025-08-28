@@ -31,6 +31,9 @@ import java.util.concurrent.ConcurrentMap;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 import org.apache.rocketmq.remoting.protocol.statictopic.TopicQueueMappingInfo;
 
+/**
+ * Topic 路由信息 - 类似一个Topic 地图
+ */
 public class TopicRouteData extends RemotingSerializable {
     private String orderTopicConf; // 是否有序的Topic序列
     private List<QueueData> queueDatas; // MQ的读写并行数量与各种配置项，属于那个broker ， 一个topic可以对应着多个 MQ，并且分配到多个broker上。

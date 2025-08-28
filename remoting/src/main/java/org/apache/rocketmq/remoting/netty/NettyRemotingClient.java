@@ -528,7 +528,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
             }
             if (update) {
-                Collections.shuffle(addrs);
+                Collections.shuffle(addrs); // 避免选择 NameServer 时候雪崩。。。避免都去尝试连接第一个。。。
                 LOGGER.info("name server address updated. NEW : {} , OLD: {}", addrs, old);
                 this.namesrvAddrList.set(addrs);
 

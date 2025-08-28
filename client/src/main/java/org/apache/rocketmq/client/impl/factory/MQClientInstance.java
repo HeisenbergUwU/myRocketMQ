@@ -116,8 +116,9 @@ public class MQClientInstance {
     // NS 地址更新，topic 路由，清理离线broker，上报客户端心跳
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, "MQClientFactoryScheduledThread")); // lambda 托管 ThreadFactory
     private final ScheduledExecutorService fetchRemoteConfigExecutorService = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, "MQClientFactoryFetchRemoteConfigScheduledThread"));
-    // 这里并不存在循环引用的问题 loop
-    private final PullMessageService pullMessageService;
+    // 这里看似是循环引用，实则不然，在Instance 实例化的时候，PullMessageService RebalanceService 实际是依赖 this 的，但是 this 仅仅掌握了 他们的实例，
+    // 设计模式来看，是一个控制反转与解耦，Service中控制调度时机，Instance 控制业务流 - 也就是需要做什么
+    private final PullMessageService pullMessageService; // 下拉消息服务，消费 or 生产 本地维护的虚拟队列，仅仅是 MQ 的一小部分
     private final RebalanceService rebalanceService;
     private final DefaultMQProducer defaultMQProducer;
     private final ConsumerStatsManager consumerStatsManager;
@@ -206,6 +207,82 @@ public class MQClientInstance {
                 MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION), RemotingCommand.getSerializeTypeConfigInThisServer());
     }
 
+    /**
+     * 做一次负载均衡
+     *
+     * @return
+     */
+    public boolean doRebalance() {
+        boolean balanced = true;
+        for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
+            MQConsumerInner impl = entry.getValue();
+            if (impl != null) {
+                try {
+                    if (!impl.tryRebalance()) {
+                        balanced = false;
+                    }
+                } catch (Throwable e) {
+                    log.error("doRebalance for consumer group [{}] exception", entry.getKey(), e);
+                }
+            }
+        }
+        return balanced;
+    }
+
+    public MQProducerInner selectProducer(final String group) {
+        return this.producerTable.get(group);
+    }
 
     // ‼️ -- CURSOR
+
+    /**
+     * 收集并返回指定消费者组（Consumer Group）的实时运行状态和详细信息。
+     *
+     * @param consumerGroup
+     * @return
+     */
+    public ConsumerRunningInfo consumerRunningInfo(final String consumerGroup) {
+        MQConsumerInner mqConsumerInner = this.consumerTable.get(consumerGroup);
+        if (mqConsumerInner == null) {
+            return null;
+        }
+
+        ConsumerRunningInfo consumerRunningInfo = mqConsumerInner.consumerRunningInfo();
+
+        List<String> nsList = this.mQClientAPIImpl.getRemotingClient().getNameServerAddressList();
+
+        StringBuilder stringBuilder = new StringBuilder();
+    }
+
+    public void rebalanceImmediately() {
+        this.rebalanceService.wakeup(); // 这里的wakeup 是 我们使用AQS实现的 可以reset的类
+    }
+
+    private void resetBrokerAddrHeartbeatFingerprintMap() {
+        brokerAddrHeartbeatFingerprintTable.clear();
+    }
+
+    public ConsumerStatsManager getConsumerStatsManager() {
+        return consumerStatsManager;
+    }
+
+    public NettyClientConfig getNettyClientConfig() {
+        return nettyClientConfig;
+    }
+
+    public ClientConfig getClientConfig() {
+        return clientConfig;
+    }
+
+    public ConcurrentMap<String, MQProducerInner> getProducerTable() {
+        return producerTable;
+    }
+
+    public ConcurrentMap<String, MQConsumerInner> getConsumerTable() {
+        return consumerTable;
+    }
+
+    public TopicRouteData queryTopicRouteData(String topic) {
+        this.get
+    }
 }

@@ -30,15 +30,15 @@ import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
 import org.apache.rocketmq.remoting.rpc.RpcRequestHeader;
 
-@RocketMQAction(value = RequestCode.CHECK_TRANSACTION_STATE, action = Action.PUB)
+@RocketMQAction(value = RequestCode.CHECK_TRANSACTION_STATE, action = Action.PUB) // 权限控制使用
 public class CheckTransactionStateRequestHeader extends RpcRequestHeader {
     @RocketMQResource(ResourceType.TOPIC)
     private String topic;
     @CFNotNull
-    private Long tranStateTableOffset;
+    private Long tranStateTableOffset; // 事务状态偏移量
     @CFNotNull
-    private Long commitLogOffset;
-    private String msgId;
+    private Long commitLogOffset; // 物理日志上的偏移量 - producer 可以通过这个 offset 回查日志，处理本地任务
+    private String msgId; // 一些ID ...
     private String transactionId;
     private String offsetMsgId;
 

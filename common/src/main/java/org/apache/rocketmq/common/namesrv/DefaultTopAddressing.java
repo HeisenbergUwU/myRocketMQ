@@ -89,6 +89,12 @@ public class DefaultTopAddressing implements TopAddressing {
         return fetchNSAddr(true, 3000);
     }
 
+    /**
+     * 这里有一个默认实现 - 吓老子一跳
+     * @param verbose
+     * @param timeoutMills
+     * @return
+     */
     public final String fetchNSAddr(boolean verbose, long timeoutMills) {
         StringBuilder url = new StringBuilder(this.wsAddr);
         try {
