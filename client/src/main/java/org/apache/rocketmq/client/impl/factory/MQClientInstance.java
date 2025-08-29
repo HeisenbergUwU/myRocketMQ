@@ -160,6 +160,7 @@ public class MQClientInstance {
                 public void onChannelIdle(String remoteAddr, Channel channel) {
                 }
 
+                // channel 可用的时候出发
                 @Override
                 public void onChannelActive(String remoteAddr, Channel channel) {
                     for (Map.Entry<String, HashMap<Long, String>> addressEntry : brokerAddrTable.entrySet()) {
@@ -180,6 +181,7 @@ public class MQClientInstance {
         } else {
             channelEventListener = null;
         }
+
         this.mQClientAPIImpl = new MQClientAPIImpl(this.nettyClientConfig, clientRemotingProcessor, rpcHook, clientConfig, channelEventListener);
 
         if (this.clientConfig.getNamesrvAddr() != null) {
@@ -200,11 +202,7 @@ public class MQClientInstance {
 
         this.consumerStatsManager = new ConsumerStatsManager(this.scheduledExecutorService);
 
-        log.info("Created a new client Instance, InstanceIndex:{}, ClientID:{}, ClientConfig:{}, ClientVersion:{}, SerializerType:{}",
-                instanceIndex,
-                this.clientId,
-                this.clientConfig,
-                MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION), RemotingCommand.getSerializeTypeConfigInThisServer());
+        log.info("Created a new client Instance, InstanceIndex:{}, ClientID:{}, ClientConfig:{}, ClientVersion:{}, SerializerType:{}", instanceIndex, this.clientId, this.clientConfig, MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION), RemotingCommand.getSerializeTypeConfigInThisServer());
     }
 
     /**
@@ -233,6 +231,54 @@ public class MQClientInstance {
         return this.producerTable.get(group);
     }
 
+
+    public synchronized void resetOffset(String topic, String group, Map<MessageQueue, Long> offsetTable) {
+        DefaultMQPushConsumerImpl consumer = null;
+        MQConsumerInner impl = this.consumerTable.get(group);
+        if (impl instanceof DefaultMQPushConsumerImpl) {
+            consumer = (DefaultMQPushConsumerImpl) impl;
+        } else {
+            log.info("[reset-offset] consumer does not exist. group={}", group);
+            return;
+        }
+        consumer.suspend();
+
+        ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = consumer.getRebalanceImpl().getProcessQueueTable();
+        for (Map.Entry<MessageQueue, ProcessQueue> entry : processQueueTable.entrySet()) {
+            MessageQueue mq = entry.getKey();
+            if (topic.equals(mq.getTopic()) && offsetTable.containsKey(mq)) {
+                ProcessQueue pq = entry.getValue();
+                pq.setDropped(true);
+                pq.clear();
+            }
+
+            try {
+                TimeUnit.SECONDS.sleep(10);
+            } catch (InterruptedException ignored) {
+            }
+
+            Iterator<MessageQueue> iterator = processQueueTable.keySet().iterator();
+            while (iterator.hasNext()) {
+                MessageQueue mq = iterator.next();
+                Long offset = offsetTable.get(mq);
+                if (topic.equals(mq.getTopic()) && offset != null) {
+                    try {
+                        consumer.updateConsumeOffset(mq, offset);
+                        consumer.getRebalanceImpl().removeUnnecessaryMessageQueue(mq, processQueueTable.get(mq));
+                        iterator.remove();
+                    } catch (Exception e) {
+                        log.warn("reset offset failed. group={}, {}", group, mq, e);
+                    }
+                }
+            }
+        } finally{
+            if (consumer != null) {
+                consumer.resume();
+            }
+        }
+    }
+
+
     // ‼️ -- CURSOR
 
     /**
@@ -257,6 +303,114 @@ public class MQClientInstance {
                 strBuilder.append(addr).append(";"); // 拼接ns字符串 -- 192.168.0.1:9876;192.168.0.2:9876;192.168.0.3:9876;
             }
         }
+
+        String nsAddr = strBuilder.toString();
+        consumerRunningInfo.getProperties().put(ConsumerRunningInfo.PROP_NAMESERVER_ADDR, nsAddr);
+        consumerRunningInfo.getProperties().put(ConsumerRunningInfo.PROP_CONSUME_TYPE, mqConsumerInner.consumeType().name());
+        consumerRunningInfo.getProperties().put(ConsumerRunningInfo.PROP_CLIENT_VERSION,
+                MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION));
+
+        return consumerRunningInfo;
+    }
+
+
+    public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
+                                                      DefaultMQProducer defaultMQProducer) {
+        try {
+            if (this.lockNamesrv.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+                try {
+                    TopicRouteData topicRouteData;
+                    if (isDefault && defaultMQProducer != null) {
+                        topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(clientConfig.getMqClientApiTimeout());
+                        if (topicRouteData != null) {
+                            for (QueueData data : topicRouteData.getQueueDatas()) {
+                                int queueNums = Math.min(defaultMQProducer.getDefaultTopicQueueNums(), data.getReadQueueNums());
+                                data.setReadQueueNums(queueNums);
+                                data.setWriteQueueNums(queueNums);
+                            }
+                        }
+                    } else {
+                        topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, clientConfig.getMqClientApiTimeout());
+                    }
+                    if (topicRouteData != null) {
+                        TopicRouteData old = this.topicRouteTable.get(topic);
+                        boolean changed = topicRouteData.topicRouteDataChanged(old);
+                        if (!changed) {
+                            changed = this.isNeedUpdateTopicRouteInfo(topic);
+                        } else {
+                            log.info("the topic[{}] route info changed, old[{}] ,new[{}]", topic, old, topicRouteData);
+                        }
+
+                        if (changed) {
+
+                            for (BrokerData bd : topicRouteData.getBrokerDatas()) {
+                                this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
+                            }
+
+                            // Update endpoint map
+                            {
+                                ConcurrentMap<MessageQueue, String> mqEndPoints = topicRouteData2EndpointsForStaticTopic(topic, topicRouteData);
+                                if (!mqEndPoints.isEmpty()) {
+                                    topicEndPointsTable.put(topic, mqEndPoints);
+                                }
+                            }
+
+                            // Update Pub info
+                            {
+                                TopicPublishInfo publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData);
+                                publishInfo.setHaveTopicRouterInfo(true);
+                                for (Entry<String, MQProducerInner> entry : this.producerTable.entrySet()) {
+                                    MQProducerInner impl = entry.getValue();
+                                    if (impl != null) {
+                                        impl.updateTopicPublishInfo(topic, publishInfo);
+                                    }
+                                }
+                            }
+
+                            // Update sub info
+                            if (!consumerTable.isEmpty()) {
+                                Set<MessageQueue> subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData);
+                                for (Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
+                                    MQConsumerInner impl = entry.getValue();
+                                    if (impl != null) {
+                                        impl.updateTopicSubscribeInfo(topic, subscribeInfo);
+                                    }
+                                }
+                            }
+                            TopicRouteData cloneTopicRouteData = new TopicRouteData(topicRouteData);
+                            log.info("topicRouteTable.put. Topic = {}, TopicRouteData[{}]", topic, cloneTopicRouteData);
+                            this.topicRouteTable.put(topic, cloneTopicRouteData);
+                            return true;
+                        }
+                    } else {
+                        log.warn("updateTopicRouteInfoFromNameServer, getTopicRouteInfoFromNameServer return null, Topic: {}. [{}]", topic, this.clientId);
+                    }
+                } catch (MQClientException e) {
+                    if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX) && !topic.equals(TopicValidator.AUTO_CREATE_TOPIC_KEY_TOPIC)) {
+                        log.warn("updateTopicRouteInfoFromNameServer Exception", e);
+                    }
+                } catch (RemotingException e) {
+                    log.error("updateTopicRouteInfoFromNameServer Exception", e);
+                    throw new IllegalStateException(e);
+                } finally {
+                    this.lockNamesrv.unlock();
+                }
+            } else {
+                log.warn("updateTopicRouteInfoFromNameServer tryLock timeout {}ms. [{}]", LOCK_TIMEOUT_MILLIS, this.clientId);
+            }
+        } catch (InterruptedException e) {
+            log.warn("updateTopicRouteInfoFromNameServer Exception", e);
+        }
+
+        return false;
+    }
+
+    public boolean updateTopicRouteInfoFromNameServer(final String topic) {
+        return updateTopicRouteInfoFromNameServer(topic, false, null);
+    }
+
+    public TopicRouteData getAnExistTopicRouteData(final String topic) {
+        return this.topicRouteTable.get(topic);
     }
 
     public void rebalanceImmediately() {
@@ -288,6 +442,11 @@ public class MQClientInstance {
     }
 
     public TopicRouteData queryTopicRouteData(String topic) {
-        this.get
+        TopicRouteData data = this.getAnExistTopicRouteData(topic);
+        if (data == null) {
+            this.updateTopicRouteInfoFromNameServer(topic);
+            data = this.getAnExistTopicRouteData(topic);
+        }
+        return data;
     }
 }
