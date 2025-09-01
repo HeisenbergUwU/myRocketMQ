@@ -278,6 +278,22 @@ public class MQClientInstance {
         }
     }
 
+    public boolean sendHeartbeatToBroker(long id, String brokerName, String addr) {
+        return sendHeartbeatToBroker(id, brokerName, addr, true);
+    }
+    /**
+     * @param id
+     * @param brokerName
+     * @param addr
+     * @param strictLockMode When the connection is initially established, sending a heartbeat will simultaneously trigger the onChannelActive event to acquire the lock again, causing an exception. Therefore,
+     *                       the exception that occurs when sending the heartbeat during the initial onChannelActive event can be ignored.
+     * @return
+     */
+    public boolean sendHeartbeatToBroker(long id,String brokerName,String addr,boolean strictLockMode)
+    {
+
+    }
+
 
     // ‼️ -- CURSOR
 

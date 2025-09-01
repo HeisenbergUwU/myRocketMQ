@@ -67,7 +67,6 @@ public class MQAdminImpl {
         createTopic(key, newTopic, queueNum, 0, null);
     }
 
-
     public void createTopic(String key, String newTopic, int queueNum, int topicSysFlag,
                             Map<String, String> attributes) throws MQClientException {
         try {
@@ -125,3 +124,10 @@ public class MQAdminImpl {
             throw new MQClientException("create new topic failed", e);
         }
     }
+
+    public List<MessageQueue> fetchPublishMessageQueues(String topic) throws MQClientException {
+        try{
+            TopicRouteData topicRouteData = this.mQClientFactory.g
+        }
+    }
+}
