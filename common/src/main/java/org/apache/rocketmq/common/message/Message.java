@@ -12,7 +12,7 @@ public class Message implements Serializable {
     private static final long serialVersionUID = 8445773977080406428L;
 
     private String topic;
-    private int flag;
+    private int flag; // 在 Apache RocketMQ 中，Message.flag 是一个 int 类型的字段，用于在消息中携带自定义的整型标记（flag），供业务或中间件内部使用。
     private Map<String, String> properties;
     private byte[] body;
     private String transactionId;
@@ -68,15 +68,11 @@ public class Message implements Serializable {
 
     public void putUserProperty(final String name, final String value) {
         if (MessageConst.STRING_HASH_SET.contains(name)) {
-            throw new RuntimeException(String.format(
-                    "The Property<%s> is used by system, input another please", name));
+            throw new RuntimeException(String.format("The Property<%s> is used by system, input another please", name));
         }
 
-        if (value == null || value.trim().isEmpty()
-                || name == null || name.trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "The name or value of property can not be null or blank string!"
-            );
+        if (value == null || value.trim().isEmpty() || name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("The name or value of property can not be null or blank string!");
         }
 
         this.putProperty(name, value);
@@ -199,13 +195,7 @@ public class Message implements Serializable {
 
     @Override
     public String toString() {
-        return "Message{" +
-                "topic='" + topic + '\'' +
-                ", flag=" + flag +
-                ", properties=" + properties +
-                ", body=" + Arrays.toString(body) +
-                ", transactionId='" + transactionId + '\'' +
-                '}';
+        return "Message{" + "topic='" + topic + '\'' + ", flag=" + flag + ", properties=" + properties + ", body=" + Arrays.toString(body) + ", transactionId='" + transactionId + '\'' + '}';
     }
 
     public void setDelayTimeSec(long sec) {
