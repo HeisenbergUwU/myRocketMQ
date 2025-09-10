@@ -16,6 +16,8 @@
   limitations under the License.
   -->
 <configuration>
+    <!-- 禁止所有 Logback 内部状态输出 -->
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <layout class="ch.qos.logback.classic.PatternLayout">
