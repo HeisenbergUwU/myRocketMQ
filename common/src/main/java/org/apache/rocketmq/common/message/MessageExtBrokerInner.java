@@ -8,14 +8,25 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.nio.ByteBuffer;
 
+/**
+ * MessageExtBrokerInner 这个类之所以要“单独封装”，而不是直接复用客户端的消息类（如 Message 或 MessageExt）
+ * ，主要是出于 性能优化、职责分离、存储效率和内部状态管理 的考虑。
+ */
 public class MessageExtBrokerInner extends MessageExt {
     private static final long serialVersionUID = 7256001576878700634L;
-    private String propertiesString;
-    private long tagsCode;
+    private String propertiesString; // 优化过的属性字符串，便于快速写入存储。
+    private long tagsCode; // Broker 用于快速过滤消息的哈希值，避免每次都要重新计算。
 
-    private ByteBuffer encodedBuff;
+    /**
+     * 问题	答案
+     * MessageExt / MessageExtBrokerInner 是 encode 前的信息吗？	✅ 是的，它们是“对象视图”，用于业务逻辑处理。
+     * encode 后的二进制会缓存吗？	✅ 会，存在 encodedBuff 中。
+     * 内存中是否同时存在原始对象和二进制？	✅ 是的，这是为了性能（避免重复编码） + 灵活性（后续处理仍需对象字段）。
+     * 这样设计合理吗？	✅ 非常合理，是高并发系统中常见的“空间换时间”和“内外模型分离”策略。
+     */
+    private ByteBuffer encodedBuff; // 预序列化后的字节缓冲，避免重复序列化，提升写入 CommitLog 的性能。
 
-    private volatile boolean encodeCompleted;
+    private volatile boolean encodeCompleted; // 标记消息是否已完成编码，用于流程控制。
 
     private MessageVersion version = MessageVersion.MESSAGE_VERSION_V1;
 
