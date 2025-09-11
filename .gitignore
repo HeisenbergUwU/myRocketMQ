@@ -89,3 +89,24 @@ test-output/
 target/
 tmp/
 logs/
+
+
+# === React ===
+# Logs
+logs
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
