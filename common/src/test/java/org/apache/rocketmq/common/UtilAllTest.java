@@ -40,6 +40,7 @@ public class UtilAllTest {
         properties.setProperty("demoLength", "456");
         properties.setProperty("demoOK", "true");
         properties.setProperty("demoName", "TestDemo");
+
         MixAll.properties2Object(properties, demoConfig);
         assertThat(demoConfig.getDemoLength()).isEqualTo(456);
         assertThat(demoConfig.getDemoWidth()).isEqualTo(123);
@@ -97,6 +98,8 @@ public class UtilAllTest {
         assertThat(UtilAll.getDiskPartitionSpaceUsedPercent("")).isCloseTo(-1, within(0.000001));
         assertThat(UtilAll.getDiskPartitionSpaceUsedPercent("nonExistingPath")).isCloseTo(-1, within(0.000001));
         assertThat(UtilAll.getDiskPartitionSpaceUsedPercent(tmpDir)).isNotCloseTo(-1, within(0.000001));
+        double diskPartitionSpaceUsedPercent = UtilAll.getDiskPartitionSpaceUsedPercent(tmpDir);
+        System.out.println(diskPartitionSpaceUsedPercent);
     }
 
     @Test
@@ -177,11 +180,11 @@ public class UtilAllTest {
         @Override
         public String toString() {
             return "DemoConfig{" +
-                "demoWidth=" + demoWidth +
-                ", demoLength=" + demoLength +
-                ", demoOK=" + demoOK +
-                ", demoName='" + demoName + '\'' +
-                '}';
+                    "demoWidth=" + demoWidth +
+                    ", demoLength=" + demoLength +
+                    ", demoOK=" + demoOK +
+                    ", demoName='" + demoName + '\'' +
+                    '}';
         }
     }
 

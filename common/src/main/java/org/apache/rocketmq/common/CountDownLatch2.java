@@ -8,12 +8,11 @@ import java.util.concurrent.locks.AbstractQueuedSynchronizer;
  */
 public class CountDownLatch2 {
     private final Sync sync;
-
     public CountDownLatch2(int count) {
         if (count < 0)
             throw new IllegalArgumentException("count < 0");
         this.sync = new Sync(count);
-    }
+    } // Compare And Swap
 
     public void await() throws InterruptedException {
         sync.acquireSharedInterruptibly(1);

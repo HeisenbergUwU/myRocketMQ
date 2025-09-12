@@ -86,6 +86,7 @@ public class MessageExtBrokerInnerTest {
         assertThat(messageExtBrokerInner.getPropertiesString()).isEqualTo("KeyB\u0001ValueBKeyA\u0001");
 
         propertiesString = "KeyA\u0001ValueA\u0002KeyB\u0001ValueBKeyA";
+        System.out.println(propertiesString);
         messageExtBrokerInner.setPropertiesString(propertiesString);
         messageExtBrokerInner.deleteProperty("KeyA");
         assertThat(messageExtBrokerInner.getPropertiesString()).isEqualTo("KeyB\u0001ValueBKeyA");
