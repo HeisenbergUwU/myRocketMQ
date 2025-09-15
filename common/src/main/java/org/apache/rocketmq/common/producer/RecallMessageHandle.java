@@ -1,6 +1,23 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.rocketmq.common.producer;
 
-import io.netty.handler.codec.DecoderException;
+import org.apache.commons.codec.DecoderException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Base64;
@@ -8,13 +25,10 @@ import java.util.Base64;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
- * 这个类的作用就是：
- *
- * 封装消息的基本标识信息（version + topic + broker + timestamp + messageId）。
- *
- * 编码成一个短串（Base64 URL-safe），可作为“撤回操作”的 handle。
- *
- * 接收前端或 API 发回的 handle 后，解码并校验，确保合法后取出内含字段，继续进行撤回逻辑。
+ * handle to recall a message, only support delay message for now
+ * v1 pattern like this:
+ * version topic brokerName timestamp messageId
+ * use Base64 to encode it
  */
 public class RecallMessageHandle {
     private static final String SEPARATOR = " ";
@@ -68,12 +82,11 @@ public class RecallMessageHandle {
         }
         String rawString;
         try {
-            // 在实际应用中，URL 安全 Base64 编码字符串可能包含 - 和 _ 字符，而标准 Base64 编码字符串包含 + 和 / 字符。如果错误地使用了不匹配的解码器，可能会导致 IllegalArgumentException 异常。
-            rawString = new String(Base64.getUrlDecoder().decode(handle.getBytes(UTF_8)), UTF_8);
+            rawString =
+                new String(Base64.getUrlDecoder().decode(handle.getBytes(UTF_8)), UTF_8);
         } catch (IllegalArgumentException e) {
             throw new DecoderException("recall handle is invalid");
         }
-
         String[] items = rawString.split(SEPARATOR);
         if (!VERSION_1.equals(items[0]) || items.length < 5) {
             throw new DecoderException("recall handle is invalid");

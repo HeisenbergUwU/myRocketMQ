@@ -1,5 +1,25 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.rocketmq.common;
+
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -10,10 +30,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
-
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -27,7 +43,6 @@ public class UtilAllTest {
     @Test
     public void testCurrentStackTrace() {
         String currentStackTrace = UtilAll.currentStackTrace();
-        System.out.println(currentStackTrace);
         assertThat(currentStackTrace).contains("UtilAll.currentStackTrace");
         assertThat(currentStackTrace).contains("UtilAllTest.testCurrentStackTrace(");
     }
@@ -40,7 +55,6 @@ public class UtilAllTest {
         properties.setProperty("demoLength", "456");
         properties.setProperty("demoOK", "true");
         properties.setProperty("demoName", "TestDemo");
-
         MixAll.properties2Object(properties, demoConfig);
         assertThat(demoConfig.getDemoLength()).isEqualTo(456);
         assertThat(demoConfig.getDemoWidth()).isEqualTo(123);
@@ -98,8 +112,6 @@ public class UtilAllTest {
         assertThat(UtilAll.getDiskPartitionSpaceUsedPercent("")).isCloseTo(-1, within(0.000001));
         assertThat(UtilAll.getDiskPartitionSpaceUsedPercent("nonExistingPath")).isCloseTo(-1, within(0.000001));
         assertThat(UtilAll.getDiskPartitionSpaceUsedPercent(tmpDir)).isNotCloseTo(-1, within(0.000001));
-        double diskPartitionSpaceUsedPercent = UtilAll.getDiskPartitionSpaceUsedPercent(tmpDir);
-        System.out.println(diskPartitionSpaceUsedPercent);
     }
 
     @Test
@@ -180,11 +192,11 @@ public class UtilAllTest {
         @Override
         public String toString() {
             return "DemoConfig{" +
-                    "demoWidth=" + demoWidth +
-                    ", demoLength=" + demoLength +
-                    ", demoOK=" + demoOK +
-                    ", demoName='" + demoName + '\'' +
-                    '}';
+                "demoWidth=" + demoWidth +
+                ", demoLength=" + demoLength +
+                ", demoOK=" + demoOK +
+                ", demoName='" + demoName + '\'' +
+                '}';
         }
     }
 

@@ -14,32 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.common.attribute;
+package org.apache.rocketmq.common.sysflag;
 
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
 
-public class CQTypeTest {
+public class PullSysFlagTest {
 
     @Test
-    public void testValues() {
-        CQType[] values = CQType.values();
-        assertEquals(3, values.length);
-        assertEquals(CQType.SimpleCQ, values[0]);
-        assertEquals(CQType.BatchCQ, values[1]);
-        assertEquals(CQType.RocksDBCQ, values[2]);
+    public void testLitePullFlag() {
+        int flag = PullSysFlag.buildSysFlag(false, false, false, false, true);
+        assertThat(PullSysFlag.hasLitePullFlag(flag)).isTrue();
     }
 
     @Test
-    public void testValueOf() {
-        assertEquals(CQType.SimpleCQ, CQType.valueOf("SimpleCQ"));
-        assertEquals(CQType.BatchCQ, CQType.valueOf("BatchCQ"));
-        assertEquals(CQType.RocksDBCQ, CQType.valueOf("RocksDBCQ"));
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testValueOf_InvalidName() {
-        CQType.valueOf("InvalidCQ");
+    public void testLitePullFlagFalse() {
+        int flag = PullSysFlag.buildSysFlag(false, false, false, false, false);
+        assertThat(PullSysFlag.hasLitePullFlag(flag)).isFalse();
     }
 }

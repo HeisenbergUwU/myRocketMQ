@@ -48,7 +48,6 @@ public class ReceiptHandleTest {
             .build();
 
         String encoded = receiptHandle.encode();
-        System.out.println(encoded);
         ReceiptHandle decoded = ReceiptHandle.decode(encoded);
 
         assertEquals(receiptHandle.getStartOffset(), decoded.getStartOffset());
@@ -98,7 +97,7 @@ public class ReceiptHandleTest {
             .build();
 
         String realTopic = receiptHandle.getRealTopic(topic, groupName);
-        System.out.println(realTopic);
+
         assertEquals(KeyBuilder.buildPopRetryTopicV1(topic, groupName), realTopic);
     }
 }

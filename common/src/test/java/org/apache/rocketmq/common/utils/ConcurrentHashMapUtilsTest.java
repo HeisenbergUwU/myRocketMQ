@@ -14,32 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.common.attribute;
+
+package org.apache.rocketmq.common.utils;
 
 import org.junit.Test;
 
+import java.util.concurrent.ConcurrentHashMap;
+
 import static org.junit.Assert.assertEquals;
 
-public class CQTypeTest {
+public class ConcurrentHashMapUtilsTest {
 
     @Test
-    public void testValues() {
-        CQType[] values = CQType.values();
-        assertEquals(3, values.length);
-        assertEquals(CQType.SimpleCQ, values[0]);
-        assertEquals(CQType.BatchCQ, values[1]);
-        assertEquals(CQType.RocksDBCQ, values[2]);
-    }
-
-    @Test
-    public void testValueOf() {
-        assertEquals(CQType.SimpleCQ, CQType.valueOf("SimpleCQ"));
-        assertEquals(CQType.BatchCQ, CQType.valueOf("BatchCQ"));
-        assertEquals(CQType.RocksDBCQ, CQType.valueOf("RocksDBCQ"));
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testValueOf_InvalidName() {
-        CQType.valueOf("InvalidCQ");
+    public void computeIfAbsent() {
+        ConcurrentHashMap<String, String> map = new ConcurrentHashMap<>();
+        map.put("123", "1111");
+        String value = ConcurrentHashMapUtils.computeIfAbsent(map, "123", k -> "234");
+        assertEquals("1111", value);
+        String value1 = ConcurrentHashMapUtils.computeIfAbsent(map, "1232", k -> "2342");
+        assertEquals("2342", value1);
+        String value2 = ConcurrentHashMapUtils.computeIfAbsent(map, "123", k -> "2342");
+        assertEquals("1111", value2);
     }
 }

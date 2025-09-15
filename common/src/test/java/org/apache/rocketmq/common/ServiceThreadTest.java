@@ -1,11 +1,28 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.rocketmq.common;
 
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 
-
 public class ServiceThreadTest {
+
     @Test
     public void testShutdown() {
         shutdown(false, false);
@@ -29,16 +46,15 @@ public class ServiceThreadTest {
         assertEquals(0, testServiceThread.waitPoint.getCount());
     }
 
-
     @Test
     public void testWaitForRunning() {
         ServiceThread testServiceThread = startTestServiceThread();
         // test waitForRunning
-        testServiceThread.waitForRunning(1000); // 还没有被正常的唤醒
+        testServiceThread.waitForRunning(1000);
         assertEquals(false, testServiceThread.hasNotified.get());
         assertEquals(1, testServiceThread.waitPoint.getCount());
         // test wake up
-        testServiceThread.wakeup(); // countdown!
+        testServiceThread.wakeup();
         assertEquals(true, testServiceThread.hasNotified.get());
         assertEquals(0, testServiceThread.waitPoint.getCount());
         // repeat waitForRunning
@@ -51,20 +67,19 @@ public class ServiceThreadTest {
         assertEquals(1, testServiceThread.waitPoint.getCount());
     }
 
-
     private ServiceThread startTestServiceThread() {
         return startTestServiceThread(false);
     }
 
     private ServiceThread startTestServiceThread(boolean daemon) {
         ServiceThread testServiceThread = new ServiceThread() {
+
             @Override
             public void run() {
                 doNothing();
             }
 
-            private void doNothing() {
-            }
+            private void doNothing() {}
 
             @Override
             public String getServiceName() {
