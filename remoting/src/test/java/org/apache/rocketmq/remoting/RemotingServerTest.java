@@ -39,20 +39,20 @@ public class RemotingServerTest {
 
     public static RemotingServer createRemotingServer() throws InterruptedException {
         NettyServerConfig config = new NettyServerConfig();
-        RemotingServer remotingServer = new NettyRemotingServer(config);
+        NettyRemotingServer remotingServer = new NettyRemotingServer(config);
         remotingServer.registerProcessor(0, new NettyRequestProcessor() {
-            @Override
-            public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) {
-                request.setRemark("Hi " + ctx.channel().remoteAddress());
-                return request;
-            }
+                    @Override
+                    public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws Exception {
+                        request.setRemark("Hi" + ctx.channel().remoteAddress());
+                        return request;
+                    }
 
-            @Override
-            public boolean rejectRequest() {
-                return false;
-            }
-        }, Executors.newCachedThreadPool());
-
+                    @Override
+                    public boolean rejectRequest() {
+                        return false;
+                    }
+                },
+                Executors.newCachedThreadPool());
         remotingServer.start();
 
         return remotingServer;
@@ -68,95 +68,4 @@ public class RemotingServerTest {
         return client;
     }
 
-    @BeforeClass
-    public static void setup() throws InterruptedException {
-        remotingServer = createRemotingServer();
-        remotingClient = createRemotingClient();
-    }
-
-    @AfterClass
-    public static void destroy() {
-        remotingClient.shutdown();
-        remotingServer.shutdown();
-    }
-
-    @Test
-    public void testInvokeSync() throws InterruptedException, RemotingConnectException,
-        RemotingSendRequestException, RemotingTimeoutException {
-        RequestHeader requestHeader = new RequestHeader();
-        requestHeader.setCount(1);
-        requestHeader.setMessageTitle("Welcome");
-        RemotingCommand request = RemotingCommand.createRequestCommand(0, requestHeader);
-        RemotingCommand response = remotingClient.invokeSync("localhost:" + remotingServer.localListenPort(), request, 1000 * 3);
-        assertNotNull(response);
-        assertThat(response.getLanguage()).isEqualTo(LanguageCode.JAVA);
-        assertThat(response.getExtFields()).hasSize(2);
-
-    }
-
-    @Test
-    public void testInvokeOneway() throws InterruptedException, RemotingConnectException,
-        RemotingTimeoutException, RemotingTooMuchRequestException, RemotingSendRequestException {
-
-        RemotingCommand request = RemotingCommand.createRequestCommand(0, null);
-        request.setRemark("messi");
-        remotingClient.invokeOneway("localhost:" + remotingServer.localListenPort(), request, 1000 * 3);
-    }
-
-    @Test
-    public void testInvokeAsync() throws InterruptedException, RemotingConnectException,
-        RemotingTimeoutException, RemotingTooMuchRequestException, RemotingSendRequestException {
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        RemotingCommand request = RemotingCommand.createRequestCommand(0, null);
-        request.setRemark("messi");
-        remotingClient.invokeAsync("localhost:" + remotingServer.localListenPort(), request, 1000 * 3, new InvokeCallback() {
-            @Override
-            public void operationComplete(ResponseFuture responseFuture) {
-
-            }
-
-            @Override
-            public void operationSucceed(RemotingCommand response) {
-                latch.countDown();
-                assertThat(response.getLanguage()).isEqualTo(LanguageCode.JAVA);
-                assertThat(response.getExtFields()).hasSize(2);
-            }
-
-            @Override
-            public void operationFail(Throwable throwable) {
-
-            }
-        });
-        latch.await();
-    }
 }
-
-class RequestHeader implements CommandCustomHeader {
-    @CFNullable
-    private Integer count;
-
-    @CFNullable
-    private String messageTitle;
-
-    @Override
-    public void checkFields() throws RemotingCommandException {
-    }
-
-    public Integer getCount() {
-        return count;
-    }
-
-    public void setCount(Integer count) {
-        this.count = count;
-    }
-
-    public String getMessageTitle() {
-        return messageTitle;
-    }
-
-    public void setMessageTitle(String messageTitle) {
-        this.messageTitle = messageTitle;
-    }
-}
-

@@ -30,7 +30,7 @@ public class NettyEncoder extends MessageToByteEncoder<RemotingCommand> {
                 log.error(remotingCommand.toString());
             }
             //出现异常之后需要关闭 channel，
-            // 1. ctx.close 需要向后面买个handler 进行传播关闭
+            // 1. ctx.close 需要向后面每个handler 进行传播关闭
             // 2. ctx.channel().close() 则是直接粗暴关闭整个链接🔥更狠！
             RemotingHelper.closeChannel(ctx.channel());
         }
