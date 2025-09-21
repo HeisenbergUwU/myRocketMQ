@@ -36,23 +36,32 @@ import static org.junit.Assert.assertNotNull;
 public class RemotingServerTest {
     private static RemotingServer remotingServer;
     private static RemotingClient remotingClient;
+    @BeforeClass
+    public static void setup() throws InterruptedException {
+        remotingServer = createRemotingServer();
+        remotingClient = createRemotingClient();
+    }
 
+    @AfterClass
+    public static void destroy() {
+        remotingClient.shutdown();
+        remotingServer.shutdown();
+    }
     public static RemotingServer createRemotingServer() throws InterruptedException {
         NettyServerConfig config = new NettyServerConfig();
         NettyRemotingServer remotingServer = new NettyRemotingServer(config);
         remotingServer.registerProcessor(0, new NettyRequestProcessor() {
-                    @Override
-                    public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws Exception {
-                        request.setRemark("Hi" + ctx.channel().remoteAddress());
-                        return request;
-                    }
+            @Override
+            public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws Exception {
+                request.setRemark("Hi" + ctx.channel().remoteAddress());
+                return request;
+            }
 
-                    @Override
-                    public boolean rejectRequest() {
-                        return false;
-                    }
-                },
-                Executors.newCachedThreadPool());
+            @Override
+            public boolean rejectRequest() {
+                return false;
+            }
+        }, Executors.newCachedThreadPool());
         remotingServer.start();
 
         return remotingServer;
@@ -68,4 +77,45 @@ public class RemotingServerTest {
         return client;
     }
 
+    @Test
+    public void testInvokeSync() throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
+        RequestHeader requestHeader = new RequestHeader();
+        requestHeader.setCount(1);
+        requestHeader.setMessageTitle("Welcome");
+        RemotingCommand request = RemotingCommand.createRequestCommand(0, requestHeader);
+        RemotingCommand response = remotingClient.invokeSync("localhost:" + remotingServer.localListenPort(), request, 1000 * 3);
+        assertNotNull(response);
+        assertThat(response.getLanguage()).isEqualTo(LanguageCode.JAVA);
+        assertThat(response.getExtFields()).hasSize(2);
+    }
+
 }
+
+class RequestHeader implements CommandCustomHeader {
+    @CFNullable
+    private Integer count;
+
+    @CFNullable
+    private String messageTitle;
+
+    @Override
+    public void checkFields() throws RemotingCommandException {
+    }
+
+    public Integer getCount() {
+        return count;
+    }
+
+    public void setCount(Integer count) {
+        this.count = count;
+    }
+
+    public String getMessageTitle() {
+        return messageTitle;
+    }
+
+    public void setMessageTitle(String messageTitle) {
+        this.messageTitle = messageTitle;
+    }
+}
+

@@ -217,6 +217,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             @Override
             public void run(Timeout timeout) throws Exception {
                 try {
+                    System.out.println("扫描 ResponseTable");
                     NettyRemotingServer.this.scanResponseTable();
                 } catch (Throwable e) {
                     log.error("scanResponseTable exception", e);
