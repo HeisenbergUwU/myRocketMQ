@@ -31,19 +31,7 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
 import org.apache.rocketmq.remoting.protocol.ResponseCode;
 
-/**
- * RemotingHelper 是 RocketMQ 客户端 Remoting（远程通信）模块的基础工具类，它整合了：
- * <p>
- * 网络连接创建与关闭
- * <p>
- * 地址解析与格式处理
- * <p>
- * 同步请求发送与响应处理
- * <p>
- * 通用编码
- * <p>
- * 调试友好型映射工具
- */
+
 public class RemotingHelper {
     public static final String DEFAULT_CHARSET = "UTF-8";
     public static final String DEFAULT_CIDR_ALL = "0.0.0.0/0";

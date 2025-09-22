@@ -29,24 +29,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-/**
- * JUnit 4 provides several built-in rules, including:
- *
- * 1. __@Rule__ - The main annotation for applying rules to test methods
- * 2. __@ClassRule__ - Applies a rule to the entire test class (executed once per class)
- *
- * ## Common JUnit 4 Rules:
- *
- * 1. __TemporaryFolder__ - Creates a temporary directory for the test
- * 2. __TestName__ - Provides access to the current test method name
- * 3. __ExpectedException__ - Allows you to specify an expected exception
- * 4. __Timeout__ - Sets a timeout for test execution
- * 5. __Ignore__ - Skips a test method or class
- * 6. __Repeat__ - Repeats a test multiple times
- * 7. __Verifier__ - Allows you to verify conditions at the end of a test
- * 8. __TestWatcher__ - Watches test execution and provides callbacks for test events
- *
- */
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
@@ -57,30 +39,27 @@ import java.net.Socket;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-/**
- * The import static statement in Java is a feature that allows you to import static members (fields and methods)
- * from a class directly into your current namespace, so you can use them without qualifying them with the class name.
- */
+
 import static org.apache.rocketmq.remoting.netty.TlsSystemConfig.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.failBecauseExceptionWasNotThrown;
 import static org.awaitility.Awaitility.await;
 import static org.junit.Assert.assertNotNull;
 
-@RunWith(MockitoJUnitRunner.class) // 通知junit 使用 MockitoJUnitRunner 执行器运行， 可以自动初始化 Mock InjectMocks Spy 注解
+@RunWith(MockitoJUnitRunner.class)
 public class TlsTest {
     private RemotingServer remotingServer;
     private RemotingClient remotingClient;
 
     @Rule
-    public TestName name = new TestName(); //
+    public TestName name = new TestName();
 
     @Rule
     public TemporaryFolder tempFolder = new TemporaryFolder();
 
     @Before
     public void setUp() throws InterruptedException {
-        tlsMode = TlsMode.ENFORCING; // Any connection attempt that doesn't use SSL/TLS will be rejected immediately.
+        tlsMode = TlsMode.ENFORCING;
         tlsTestModeEnable = false;
         tlsServerNeedClientAuth = "require";
         tlsServerKeyPath = getCertsPath("server.key");
@@ -106,7 +85,8 @@ public class TlsTest {
             tlsClientKeyPath = getCertsPath("badClient.key");
             tlsClientCertPath = getCertsPath("badClient.pem");
             tlsServerAuthClient = false;
-        } else if ("noClientAuthFailure".equals(name.getMethodName())) {
+        }
+        else if ("noClientAuthFailure".equals(name.getMethodName())) {
             //Clear the client cert config to ensure produce the handshake error
             tlsClientKeyPath = "";
             tlsClientCertPath = "";
@@ -144,6 +124,12 @@ public class TlsTest {
             tlsServerNeedClientAuth = "none";
         }
 
+        remotingServer = RemotingServerTest.createRemotingServer();
+        remotingClient = RemotingServerTest.createRemotingClient(clientConfig);
+
+        await().pollDelay(Duration.ofMillis(10))
+                .pollInterval(Duration.ofMillis(10))
+                .atMost(20, TimeUnit.SECONDS).until(() -> isHostConnectable(getServerAddress()));
     }
 
     @After
@@ -153,20 +139,160 @@ public class TlsTest {
         tlsMode = TlsMode.PERMISSIVE;
     }
 
+    /**
+     * Tests that a client and a server configured using two-way SSL auth can successfully
+     * communicate with each other.
+     */
     @Test
-    public void test() {
-        String certsPath = getCertsPath("badClient.key");
-
-        System.out.println(certsPath);
+    public void basicClientServerIntegrationTest() throws Exception {
+        requestThenAssertResponse();
     }
 
     @Test
-    public void test123() {
-        String certsPath = getCertsPath("badClient.key");
+    public void reloadSslContextForServer() throws Exception {
+        requestThenAssertResponse();
 
-        System.out.println(certsPath);
+        //Use new cert and private key
+        tlsClientKeyPath = getCertsPath("badClient.key");
+        tlsClientCertPath = getCertsPath("badClient.pem");
+
+        ((NettyRemotingServer) remotingServer).loadSslContext();
+
+        //Request Again
+        requestThenAssertResponse();
+
+        //Start another client
+        NettyClientConfig clientConfig = new NettyClientConfig();
+        clientConfig.setUseTLS(true);
+        RemotingClient remotingClient = RemotingServerTest.createRemotingClient(clientConfig);
+        requestThenAssertResponse(remotingClient);
     }
 
+    @Test
+    public void serverNotNeedClientAuth() throws Exception {
+        requestThenAssertResponse();
+    }
+
+    @Test
+    public void serverWantClientAuth_ButClientNoCert() throws Exception {
+        requestThenAssertResponse();
+    }
+
+    @Test
+    public void serverAcceptsUnAuthClient() throws Exception {
+        requestThenAssertResponse();
+    }
+
+    @Test
+    public void disabledServerRejectsSSLClient() throws Exception {
+        try {
+            RemotingCommand response = remotingClient.invokeSync(getServerAddress(), createRequest(), 1000 * 5);
+            failBecauseExceptionWasNotThrown(RemotingSendRequestException.class);
+        } catch (RemotingSendRequestException ignore) {
+        }
+    }
+
+    @Test
+    public void disabledServerAcceptUnAuthClient() throws Exception {
+        requestThenAssertResponse();
+    }
+
+    /**
+     * Tests that a server configured to require client authentication refuses to accept connections
+     * from a client that has an untrusted certificate.
+     */
+    @Test
+    public void serverRejectsUntrustedClientCert() throws Exception {
+        try {
+            RemotingCommand response = remotingClient.invokeSync(getServerAddress(), createRequest(), 1000 * 5);
+            failBecauseExceptionWasNotThrown(RemotingSendRequestException.class);
+        } catch (RemotingSendRequestException ignore) {
+        }
+    }
+
+    @Test
+    public void serverAcceptsUntrustedClientCert() throws Exception {
+        requestThenAssertResponse();
+//        Thread.sleep(1000000L);
+    }
+
+    /**
+     * Tests that a server configured to require client authentication actually does require client
+     * authentication.
+     */
+    @Test
+    public void noClientAuthFailure() throws Exception {
+        try {
+            RemotingCommand response = remotingClient.invokeSync(getServerAddress(), createRequest(), 1000 * 3);
+            failBecauseExceptionWasNotThrown(RemotingSendRequestException.class);
+        } catch (RemotingSendRequestException ignore) {
+        }
+    }
+
+    /**
+     * Tests that a client configured using GrpcSslContexts refuses to talk to a server that has an
+     * an untrusted certificate.
+     */
+    @Test
+    public void clientRejectsUntrustedServerCert() throws Exception {
+        try {
+            RemotingCommand response = remotingClient.invokeSync(getServerAddress(), createRequest(), 1000 * 3);
+            failBecauseExceptionWasNotThrown(RemotingSendRequestException.class);
+        } catch (RemotingSendRequestException ignore) {
+        }
+    }
+
+    @Test
+    public void clientAcceptsUntrustedServerCert() throws Exception {
+        requestThenAssertResponse();
+    }
+
+    @Test
+    public void testTlsConfigThroughFile() throws Exception {
+        File file = tempFolder.newFile("tls.config");
+        tlsTestModeEnable = true;
+
+        tlsConfigFile = file.getAbsolutePath();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(TLS_SERVER_NEED_CLIENT_AUTH + "=require\n");
+        sb.append(TLS_SERVER_KEYPATH + "=/server.key\n");
+        sb.append(TLS_SERVER_CERTPATH + "=/server.pem\n");
+        sb.append(TLS_SERVER_KEYPASSWORD + "=2345\n");
+        sb.append(TLS_SERVER_AUTHCLIENT + "=true\n");
+        sb.append(TLS_SERVER_TRUSTCERTPATH + "=/ca.pem\n");
+        sb.append(TLS_CLIENT_KEYPATH + "=/client.key\n");
+        sb.append(TLS_CLIENT_KEYPASSWORD + "=1234\n");
+        sb.append(TLS_CLIENT_CERTPATH + "=/client.pem\n");
+        sb.append(TLS_CLIENT_AUTHSERVER + "=false\n");
+        sb.append(TLS_CLIENT_TRUSTCERTPATH + "=/ca.pem\n");
+
+        writeStringToFile(file.getAbsolutePath(), sb.toString());
+        TlsHelper.buildSslContext(false);
+
+        assertThat(tlsServerNeedClientAuth).isEqualTo("require");
+        assertThat(tlsServerKeyPath).isEqualTo("/server.key");
+        assertThat(tlsServerCertPath).isEqualTo("/server.pem");
+        assertThat(tlsServerKeyPassword).isEqualTo("2345");
+        assertThat(tlsServerAuthClient).isEqualTo(true);
+        assertThat(tlsServerTrustCertPath).isEqualTo("/ca.pem");
+        assertThat(tlsClientKeyPath).isEqualTo("/client.key");
+        assertThat(tlsClientKeyPassword).isEqualTo("1234");
+        assertThat(tlsClientCertPath).isEqualTo("/client.pem");
+        assertThat(tlsClientAuthServer).isEqualTo(false);
+        assertThat(tlsClientTrustCertPath).isEqualTo("/ca.pem");
+
+        tlsConfigFile = "/notFound";
+    }
+
+    private static void writeStringToFile(String path, String content) {
+        try {
+            PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(path, true)));
+            out.println(content);
+            out.close();
+        } catch (IOException ignore) {
+        }
+    }
 
     private static String getCertsPath(String fileName) {
         ClassLoader loader = TlsTest.class.getClassLoader();
@@ -174,18 +300,20 @@ public class TlsTest {
         if (null == stream) {
             throw new RuntimeException("File: " + fileName + " is not found");
         }
+
         try {
             String[] segments = fileName.split("\\.");
             File f = File.createTempFile(UUID.randomUUID().toString(), segments[1]);
-            f.deleteOnExit(); // 退出后自动删除
+            f.deleteOnExit();
+
             try (BufferedInputStream bis = new BufferedInputStream(stream);
-                 BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(f));) {
+                 BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(f))) {
                 byte[] buffer = new byte[1024];
                 int len;
                 while ((len = bis.read(buffer)) > 0) {
                     bos.write(buffer, 0, len);
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
                 throw new RuntimeException(e);
             }
             return f.getAbsolutePath();
@@ -197,5 +325,32 @@ public class TlsTest {
     private String getServerAddress() {
         return "localhost:" + remotingServer.localListenPort();
     }
-}
 
+    private static RemotingCommand createRequest() {
+        RequestHeader requestHeader = new RequestHeader();
+        requestHeader.setCount(1);
+        requestHeader.setMessageTitle("Welcome");
+        return RemotingCommand.createRequestCommand(0, requestHeader);
+    }
+
+    private void requestThenAssertResponse() throws Exception {
+        requestThenAssertResponse(remotingClient);
+    }
+
+    private void requestThenAssertResponse(RemotingClient remotingClient) throws Exception {
+        RemotingCommand response = remotingClient.invokeSync(getServerAddress(), createRequest(), 1000 * 3);
+        assertNotNull(response);
+        assertThat(response.getLanguage()).isEqualTo(LanguageCode.JAVA);
+        assertThat(response.getExtFields()).hasSize(2);
+        assertThat(response.getExtFields().get("messageTitle")).isEqualTo("Welcome");
+    }
+
+    private boolean isHostConnectable(String addr) {
+        try (Socket socket = new Socket()) {
+            socket.connect(NetworkUtil.string2SocketAddress(addr));
+            return true;
+        } catch (IOException ignored) {
+        }
+        return false;
+    }
+}

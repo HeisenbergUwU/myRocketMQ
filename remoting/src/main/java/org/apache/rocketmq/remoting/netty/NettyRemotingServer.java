@@ -240,7 +240,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     protected ChannelPipeline configChannel(SocketChannel ch) {
         return ch.pipeline().addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null, // 如果是 null 那么则使用 boss 的 EventLoop
-                HANDSHAKE_HANDLER_NAME, new HandshakeHandler()).addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null, encoder, new NettyDecoder(), distributionHandler, new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()), connectionManageHandler, serverHandler);
+                HANDSHAKE_HANDLER_NAME,
+                new HandshakeHandler())
+                .addLast(nettyServerConfig.isServerNettyWorkerGroupEnable() ? defaultEventExecutorGroup : null, encoder, new NettyDecoder(), distributionHandler, new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()), connectionManageHandler, serverHandler);
     }
 
     private void addCustomConfig(ServerBootstrap childHandler) {

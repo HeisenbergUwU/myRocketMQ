@@ -281,6 +281,7 @@ public class MQClientInstance {
     public boolean sendHeartbeatToBroker(long id, String brokerName, String addr) {
         return sendHeartbeatToBroker(id, brokerName, addr, true);
     }
+
     /**
      * @param id
      * @param brokerName
@@ -289,8 +290,7 @@ public class MQClientInstance {
      *                       the exception that occurs when sending the heartbeat during the initial onChannelActive event can be ignored.
      * @return
      */
-    public boolean sendHeartbeatToBroker(long id,String brokerName,String addr,boolean strictLockMode)
-    {
+    public boolean sendHeartbeatToBroker(long id, String brokerName, String addr, boolean strictLockMode) {
 
     }
 
